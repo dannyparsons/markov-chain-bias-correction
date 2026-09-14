@@ -183,7 +183,7 @@ tbl_annual_occ_nrain <- zim_annual_occ_metrics %>%
 tbl_annual_occ_nrain %>%
   mutate(across(starts_with("ME"), ~ sprintf("%.2f", .x)),
          across(starts_with("cor"), ~ sprintf("%.2f", .x))) %>%
-  write.csv(here("results", "Table5.csv"), row.names = FALSE)
+  write.csv(here("results", "Table6.csv"), row.names = FALSE)
 
 # Annual length of longest dry spell (October to March)
 ggplot(zim_annual_occ, 
@@ -719,7 +719,7 @@ station_block_summaries <- station_block_summaries %>%
   pivot_wider(names_from = source, values_from = value)
 
 station_block_summaries %>%
-  write.csv(here("results", "TableX.csv"), row.names = FALSE)
+  write.csv(here("results", "Table5.csv"), row.names = FALSE)
 
 # RAINFALL AMOUNTS --------------------------------------------------------
 
@@ -797,7 +797,7 @@ zim_monthly_amt_metrics <- zim_monthly_amt %>%
 
 zim_monthly_amt_metrics %>%
   mutate(across(where(is.numeric), ~ sprintf("%.2f", .x))) %>%
-  write.csv(here("results", "Table7.csv"), row.names = FALSE)
+  write.csv(here("results", "TableS5.csv"), row.names = FALSE)
 
 ggplot(zim_monthly_amt, 
        aes(x = month_abb, y = max_rain, colour = source, group = source)) +
@@ -853,7 +853,7 @@ zim_annual_amt_metrics <- zim_annual_amt_wide %>%
 
 zim_annual_amt_metrics %>%
   mutate(across(where(is.numeric), ~ sprintf("%.2f", .x))) %>%
-  write.csv(here("results", "Table8.csv"), row.names = FALSE)
+  write.csv(here("results", "TableS6.csv"), row.names = FALSE)
 
 # Annual total rainfall
 ggplot(zim_annual_amt, 
@@ -966,7 +966,7 @@ rmse_rain_amounts_0 <- fitted_doy_df_0_amounts %>%
 
 rmse_rain_amounts_0 %>%
   mutate(across(where(is.numeric), ~ sprintf("%.2f", .x))) %>%
-  write.csv(here("results", "Table9.csv"), row.names = FALSE)
+  write.csv(here("results", "Table12.csv"), row.names = FALSE)
 
 # By block
 
@@ -1181,7 +1181,7 @@ station_block_summaries_amounts <- station_block_summaries_amounts %>%
   pivot_wider(names_from = source, values_from = value)
 
 station_block_summaries_amounts %>%
-  write.csv(here("results", "TableW.csv"), row.names = FALSE)
+  write.csv(here("results", "Table11.csv"), row.names = FALSE)
 
 # POD and HSS for rainfall categories -------------------------------------
 
