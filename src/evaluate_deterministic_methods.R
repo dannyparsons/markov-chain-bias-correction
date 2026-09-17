@@ -7,10 +7,12 @@ library(tidyr)
 library(purrr)
 library(verification)
 library(naflex)
+library(boot)
 
 # Setup -------------------------------------------------------------------
 
 source(here("src", "helper_funs.R"))
+source(here("src", "bootstrap_funs.R"))
 
 zimbabwe_bc <- read_rds(here("data", "BC_data", "zimbabwe_agera5_bc.RDS"))
 
@@ -113,11 +115,15 @@ ggsave(here("results", "Fig3.png"), bg = "white",
 
 zim_annual_occ <- zimbabwe_bc_stack_occ %>%
   group_by(station, source, s_year) %>%
+  # first remove incomplete years
+  filter(!(s_year %in% c(1978, 2022))) %>%
   summarise(n_rain = sum(rainday %>% na_omit_if(n = 27, consec = 20))) %>%
   ungroup()
 
 zim_annual_dryspells <- zimbabwe_bc_stack_occ %>%
   group_by(station, source, s_year) %>%
+  # first remove incomplete years (2022 retained since complete up to March 2023)
+  filter(!(s_year %in% c(1978))) %>%
   filter(month %in% c(10:12, 1:3)) %>%
   summarise(
     max_dry_spell = {
@@ -130,7 +136,7 @@ zim_annual_dryspells <- zimbabwe_bc_stack_occ %>%
   dplyr::select(-c(na, naconsec)) %>%
   ungroup()
 
-zim_annual_occ <- left_join(zim_annual_occ, zim_annual_dryspells, 
+zim_annual_occ <- full_join(zim_annual_occ, zim_annual_dryspells, 
                             by = c("station", "source", "s_year"))
 
 zim_annual_occ_station <- zim_annual_occ %>% 
@@ -156,9 +162,11 @@ zim_annual_occ_metrics <- zim_annual_occ_wide %>%
             max_dry_spell_cor = cor(max_dry_spell, max_dry_spell_station, use = "complete.obs"))
 
 # Annual number of rain days
-ggplot(zim_annual_occ, 
+# (2022 is already NA for n_rain but filtering removes it from influencing axis)
+ggplot(zim_annual_occ %>% filter(s_year != 2022), 
        aes(x = s_year, y = n_rain, colour = source)) +
   geom_line() +
+  geom_point(size = 0.6) +
   facet_wrap(vars(station)) +
   col_scale_occ +
   base_theme() +
@@ -184,6 +192,34 @@ tbl_annual_occ_nrain %>%
   mutate(across(starts_with("ME"), ~ sprintf("%.2f", .x)),
          across(starts_with("cor"), ~ sprintf("%.2f", .x))) %>%
   write.csv(here("results", "Table6.csv"), row.names = FALSE)
+
+# Bootstrap CIs for nram ME and corr (Table 6)
+zim_annual_occ_nrain_wide <- zim_annual_occ %>%
+  # (2022 is already NA for n_rain but filtering removes it from influencing number of observations)
+  filter(s_year != 2022) %>%
+  dplyr::select(station, s_year, source, n_rain) %>%
+  pivot_wider(names_from = source, values_from = n_rain) %>%
+  arrange(station, s_year) %>%
+  dplyr::select(station, s_year, Gauge, `LOCI/QM`, MC) %>%
+  dplyr::rename(LOCI_QM = `LOCI/QM`)
+
+set.seed(6)
+
+nrain_cis <- zim_annual_occ_nrain_wide %>%
+  group_by(station) %>%
+  nest() %>%
+  mutate(
+    bootstrap = map(data, nrain_bootstrap_station, 
+                    statistic = me_corr_occ_stats,
+                    R = 10000, l = 3)
+  ) %>%
+  dplyr::select(station, bootstrap) %>%
+  unnest(bootstrap)
+
+nrain_cis %>%
+  mutate(across(where(is.numeric), ~ sprintf("%.2f", .x))) %>%
+  #TODO Update table name once finalised
+  write.csv(here("results", "Table6CIs.csv"), row.names = FALSE)
 
 # Annual length of longest dry spell (October to March)
 ggplot(zim_annual_occ, 
@@ -213,11 +249,39 @@ tbl_annual_occ_maxdry <- zim_annual_occ_metrics %>%
 tbl_annual_occ_maxdry %>%
   mutate(across(starts_with("ME"), ~ sprintf("%.2f", .x)),
          across(starts_with("cor"), ~ sprintf("%.2f", .x))) %>%
-  write.csv(here("results", "Table6.csv"), row.names = FALSE)
+  write.csv(here("results", "Table7.csv"), row.names = FALSE)
+
+# Bootstrap CIs for max dry spell ME and corr (Table 7)
+zim_annual_occ_maxdryspell_wide <- zim_annual_occ %>%
+  dplyr::select(station, s_year, source, max_dry_spell) %>%
+  pivot_wider(names_from = source, values_from = max_dry_spell) %>%
+  arrange(station, s_year) %>%
+  dplyr::select(station, s_year, Gauge, `LOCI/QM`, MC) %>%
+  dplyr::rename(LOCI_QM = `LOCI/QM`)
+
+set.seed(6)
+
+maxdryspell_cis <- zim_annual_occ_maxdryspell_wide %>%
+  group_by(station) %>%
+  nest() %>%
+  mutate(
+    bootstrap = map(data, nrain_bootstrap_station, 
+                    statistic = me_corr_occ_stats,
+                    R = 10000, l = 3)
+  ) %>%
+  dplyr::select(station, bootstrap) %>%
+  unnest(bootstrap)
+
+maxdryspell_cis %>%
+  mutate(across(where(is.numeric), ~ sprintf("%.2f", .x))) %>%
+  #TODO Update table name once finalised
+  write.csv(here("results", "Table7CIs.csv"), row.names = FALSE)
 
 # Distribution of wet/dry spells ------------------------------------------
 
 dry_spells <- zimbabwe_bc_stack_occ %>%
+  # remove incomplete year
+  filter(s_year != 1978) %>%
   group_by(station, source, s_year) %>%
   filter(month %in% c(10:12, 1:3)) %>%
   reframe(dry_spell_length = {
@@ -817,6 +881,8 @@ ggsave(here("results", "Fig14.jpeg"),
 
 zim_annual_amt <- zimbabwe_bc_stack_amt %>%
   group_by(station, source, s_year) %>%
+  # first remove incomplete years
+  filter(!(s_year %in% c(1978, 2022))) %>%
   summarise(n_rain = sum(rainday %>% na_omit_if(n = 27, consec = 20)),
             t_rain = sum(rr %>% na_omit_if(n = 27, consec = 20)),
             mean_rain = t_rain / n_rain,
@@ -859,6 +925,7 @@ zim_annual_amt_metrics %>%
 ggplot(zim_annual_amt, 
        aes(x = s_year, y = t_rain, colour = source)) +
   geom_line() +
+  geom_point(size = 0.6) +
   facet_wrap(vars(station)) +
   labs(colour = "Source",
        x = "Year",
@@ -866,13 +933,14 @@ ggplot(zim_annual_amt,
   col_scale_amt + 
   base_theme()
 
-ggsave(here("results", "FigS1.jpeg"),
+ggsave(here("results", "FigS1.png"), dpi = 600,
        width = 12, height = 6)
 
 # Annual mean rainfall
 ggplot(zim_annual_amt, 
        aes(x = s_year, y = mean_rain, colour = source)) +
   geom_line() +
+  geom_point(size = 0.6) +
   facet_wrap(vars(station)) +
   labs(colour = "Source",
        x = "Year",
@@ -880,13 +948,14 @@ ggplot(zim_annual_amt,
   col_scale_amt + 
   base_theme()
 
-ggsave(here("results", "Fig15.jpeg"),
+ggsave(here("results", "Fig15.png"), dpi = 600,
        width = 12, height = 6)
 
 # Annual max rainfall
 ggplot(zim_annual_amt, 
        aes(x = s_year, y = max_rain, colour = source)) +
   geom_line() +
+  geom_point(size = 0.6) +
   facet_wrap(vars(station)) +
   labs(colour = "Source",
        x = "Year",
@@ -894,7 +963,7 @@ ggplot(zim_annual_amt,
   col_scale_amt + 
   base_theme()
 
-ggsave(here("results", "FigS2.jpeg"),
+ggsave(here("results", "FigS2.png"), dpi = 600,
        width = 12, height = 6)
 
 # Seasonal ----------------------------------------------------------------
