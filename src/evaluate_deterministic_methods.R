@@ -27,6 +27,8 @@ zimbabwe_bc_stack <- zimbabwe_bc_stack %>%
   mutate(block = cut(date, breaks = blocks, include.lowest = TRUE, right = FALSE,
                      labels = paste0("block_", 1:4)))
 
+rm(zimbabwe_bc)
+
 # 1 Aug = 214
 s_doy_start <- 214
 
@@ -290,6 +292,8 @@ dry_spells <- zimbabwe_bc_stack_occ %>%
   })
 
 wet_spells <- zimbabwe_bc_stack_occ %>%
+  # remove incomplete year
+  filter(s_year != 1978) %>%
   group_by(station, source, s_year) %>%
   filter(month %in% c(10:12, 1:3)) %>%
   reframe(wet_spell_length = {
@@ -333,7 +337,31 @@ ks_results_wet %>%
   mutate(across(starts_with("K-S"), ~ sprintf("%.3f", .x)),
          `p value` = ifelse(`p value` < 0.001, "<0.001", 
                             sprintf("%.3f", `p value`))) %>%
-  write.csv(here("results", "Table7.csv"), row.names = FALSE)
+  write.csv(here("results", "Table8.csv"), row.names = FALSE)
+
+# Bootstrap CIs for wet spells K-S (Table 8)
+set.seed(6)
+
+wet_ks_cis <- wet_spells %>%
+  group_by(station) %>%
+  nest() %>%
+  mutate(
+    bootstrap = map(
+      data,
+      ks_bootstrap_station,
+      R = 10000,
+      l = 3,
+      col = "wet_spell_length"
+    )
+  ) %>%
+  dplyr::select(station, bootstrap) %>%
+  unnest(bootstrap)
+
+wet_ks_cis  %>%
+  mutate(across(where(is.numeric), ~ sprintf("%.3f", .x))) %>%
+  #TODO Update table name once finalised
+  write.csv(here("results", "Table8CIs.csv"), row.names = FALSE)
+
 
 ggplot(dry_spells, aes(x = dry_spell_length, colour = source)) +
   stat_ecdf(linewidth = 1) +
@@ -371,7 +399,30 @@ ks_results_dry %>%
   mutate(across(starts_with("K-S"), ~ sprintf("%.3f", .x)),
          `p value` = ifelse(`p value` < 0.001, "<0.001", 
                             sprintf("%.3f", `p value`))) %>%
-  write.csv(here("results", "Table8.csv"), row.names = FALSE)
+  write.csv(here("results", "Table9.csv"), row.names = FALSE)
+
+# Bootstrap CIs for dry spells K-S (Table 9)
+set.seed(6)
+
+dry_ks_cis <- dry_spells %>%
+  group_by(station) %>%
+  nest() %>%
+  mutate(
+    bootstrap = map(
+      data,
+      ks_bootstrap_station,
+      R = 10000,
+      l = 3,
+      col = "dry_spell_length"
+    )
+  ) %>%
+  dplyr::select(station, bootstrap) %>%
+  unnest(bootstrap)
+
+dry_ks_cis  %>%
+  mutate(across(where(is.numeric), ~ sprintf("%.3f", .x))) %>%
+  #TODO Update table name once finalised
+  write.csv(here("results", "Table9CIs.csv"), row.names = FALSE)
 
 # By block
 
@@ -622,6 +673,30 @@ ggplot(rmse_rainday_1,
 
 ggsave(here("results", "Fig10.png"), bg = "white",
        dpi = 600, width = 12, height = 6)
+
+# First order RMSE CIs
+
+source(here("src", "bootstrap_funs.R"))
+set.seed(6)
+
+mc_first_occ_rmse_cis <- zimbabwe_bc_stack_occ %>%
+  group_by(station) %>%
+  nest() %>%
+  mutate(
+    bootstrap = map(
+      data,
+      mc_first_rmse_bootstrap_station,
+      R = 10000,
+      parallel = "snow",
+      ncpus = 8
+    )
+  ) %>%
+  dplyr::select(station, bootstrap) %>%
+  unnest(bootstrap)
+
+mc_first_occ_rmse_cis %>%
+  mutate(across(where(is.numeric), ~ sprintf("%.3f", .x))) %>%
+  write.csv(here("results", "TableS3CIs.csv"), row.names = FALSE)
 
 # By block
 
