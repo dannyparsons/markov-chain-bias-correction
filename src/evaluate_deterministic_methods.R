@@ -835,12 +835,38 @@ ggsave(here("results", "Fig11.png"), bg = "white",
 
 # Include table in supplementary material
 zimbabwe_pod_hss_occ_wide <- zimbabwe_pod_hss_occ %>%
-  pivot_wider(names_from = metric, values_from = value)
+  pivot_wider(names_from = source, values_from = value) %>%
+  arrange(metric, station)
 
 zimbabwe_pod_hss_occ_wide %>%
   mutate(across(where(is.numeric), ~ sprintf("%.3f", .x))) %>%
-  write.csv(here("results", "TableS3.csv"), row.names = FALSE)
+  write.csv(here("results", "TableS4.csv"), row.names = FALSE)
 
+# CIs for POD, FAR, HSS (Table S4)
+
+set.seed(6)
+source(here("src", "bootstrap_funs.R"))
+
+occ_det_cis <- zimbabwe_bc_comp_occ %>%
+  group_by(station) %>%
+  nest() %>%
+  mutate(
+    bootstrap = purrr::map(
+      data,
+      occ_detection_bootstrap_station,
+      R = 10000
+    )
+  ) %>%
+  dplyr::select(station, bootstrap) %>%
+  tidyr::unnest(bootstrap)
+
+occ_det_cis %>%
+  pivot_longer(cols = -station, names_to = c("metric", ".value"),
+               names_pattern = "(pod|far|hss)_(diff|ci)") %>%
+  dplyr::select(station, metric, diff, ci) %>%
+  arrange(factor(metric, levels = c("pod", "far", "hss")), station) %>%
+  mutate(across(where(is.numeric), ~ sprintf("%.3f", .x))) %>%
+  write.csv(here("results", "TableS4CIs.csv"), row.names = FALSE)
 
 # Station-block summaries -------------------------------------------------
 
