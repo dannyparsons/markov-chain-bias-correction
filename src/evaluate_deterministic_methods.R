@@ -910,14 +910,16 @@ col_fill_amt <- scale_fill_manual(
 
 # Monthly climatology -----------------------------------------------------
 
-zim_monthly_amt <- zimbabwe_bc_stack_amt %>%
+zim_monthly_annual_amt <- zimbabwe_bc_stack_amt %>%
   group_by(station, source, month_abb, year) %>%
   summarise(n_rain = sum(rainday %>% na_omit_if(n = 10, consec = 4)),
             t_rain = sum(rr %>% na_omit_if(n = 10, consec = 4)),
             mean_rain = t_rain / n_rain,
             mean_rain = ifelse(is.infinite(mean_rain), NA, mean_rain),
             max_rain = max(rr %>% na_omit_if(n = 10, consec = 4)),
-            max_rain = ifelse(is.infinite(max_rain), NA, max_rain)) %>%
+            max_rain = ifelse(is.infinite(max_rain), NA, max_rain)) 
+
+zim_monthly_amt <- zim_monthly_annual_amt %>%
   summarise(t_rain = mean(t_rain, na.rm = TRUE),
             mean_rain = mean(mean_rain, na.rm = TRUE),
             max_rain = mean(max_rain, na.rm = TRUE))
@@ -933,8 +935,8 @@ ggplot(zim_monthly_amt,
   col_scale_amt +
   base_theme()
 
-ggsave(here("results", "Fig12.jpeg"),
-       width = 12, height = 6)
+ggsave(here("results", "Fig12.png"), dpi = 600, 
+       bg = "white", width = 12, height = 6)
 
 ggplot(zim_monthly_amt, 
        aes(x = month_abb, y = mean_rain, colour = source, group = source)) +
@@ -947,14 +949,15 @@ ggplot(zim_monthly_amt,
   col_scale_amt +
   base_theme()
 
-ggsave(here("results", "Fig13.jpeg"),
-       width = 12, height = 6)
+ggsave(here("results", "Fig13.png"), dpi = 600,
+       bg = "white", width = 12, height = 6)
 
 zim_monthly_amt_metrics <- zim_monthly_amt %>%
   dplyr::select(station, source, month_abb, mean_rain) %>%
   pivot_wider(names_from = source, values_from = mean_rain) %>%
   pivot_longer(cols = -c(station, month_abb, Gauge),
-               names_to = "source", values_to = "mean_rain_src") %>%
+               names_to = "source", values_to = "mean_rain_src", 
+               names_ptypes = factor(levels = c("AgERA5", "LOCI", "MC LOCI", "QM", "MC QM"))) %>%
   filter(!is.na(Gauge), !is.na(mean_rain_src)) %>%
   group_by(station, source) %>%
   summarise(RMSE = sqrt(mean((mean_rain_src - Gauge)^2))) %>%
@@ -975,14 +978,37 @@ ggplot(zim_monthly_amt,
   col_scale_amt +
   base_theme()
 
-ggsave(here("results", "Fig14.jpeg"),
-       width = 12, height = 6)
+ggsave(here("results", "Fig14.png"), dpi = 600,
+       bg = "white", width = 12, height = 6)
+
+# Boostrap CIs for Month mean rainfall RMSE (Table S5)
+
+set.seed(6)
+source(here("src", "bootstrap_funs.R"))
+
+monthly_mean_rmse_cis <- zim_monthly_annual_amt %>%
+  group_by(station) %>%
+  nest() %>%
+  mutate(
+    bootstrap = map(
+      data,
+      monthly_rmse_bootstrap_station,
+      R = 10000,
+      l = 3
+    )
+  ) %>%
+  dplyr::select(station, bootstrap) %>%
+  unnest(bootstrap)
+
+monthly_mean_rmse_cis %>%
+  mutate(across(where(is.numeric), ~ sprintf("%.2f", .x))) %>%
+  write.csv(here("results", "TableS5CIs.csv"), row.names = FALSE)
 
 # Annual summaries --------------------------------------------------------
 
 zim_annual_amt <- zimbabwe_bc_stack_amt %>%
   group_by(station, source, s_year) %>%
-  # first remove incomplete years
+  # remove incomplete years
   filter(!(s_year %in% c(1978, 2022))) %>%
   summarise(n_rain = sum(rainday %>% na_omit_if(n = 27, consec = 20)),
             t_rain = sum(rr %>% na_omit_if(n = 27, consec = 20)),
@@ -1022,6 +1048,140 @@ zim_annual_amt_metrics %>%
   mutate(across(where(is.numeric), ~ sprintf("%.2f", .x))) %>%
   write.csv(here("results", "TableS6.csv"), row.names = FALSE)
 
+# Boostrap CIs for annual summaries (Table S6)
+
+set.seed(6)
+source(here("src", "bootstrap_funs.R"))
+
+# Total rain
+zim_annual_t_rain_wide <- zim_annual_amt_wide %>%
+  dplyr::select(station, source, s_year, t_rain, Gauge = t_rain_station) %>%
+  pivot_wider(names_from = source, values_from = t_rain) %>%
+  arrange(station, s_year)
+
+annual_t_rain_cis <- zim_annual_t_rain_wide %>%
+  group_by(station) %>%
+  nest() %>%
+  mutate(
+    bootstrap = map(
+      data,
+      annual_amt_bootstrap_station,
+      statistic = me_corr_rsd_amt_stats,
+      R = 10000,
+      l = 3
+    )
+  ) %>%
+  dplyr::select(station, bootstrap) %>%
+  unnest(bootstrap)
+
+# Mean rain
+zim_annual_mean_rain_wide <- zim_annual_amt_wide %>%
+  dplyr::select(station, source, s_year, mean_rain, Gauge = mean_rain_station) %>%
+  pivot_wider(names_from = source, values_from = mean_rain) %>%
+  arrange(station, s_year)
+
+annual_mean_rain_cis <- zim_annual_mean_rain_wide %>%
+  group_by(station) %>%
+  nest() %>%
+  mutate(
+    bootstrap = map(
+      data,
+      annual_amt_bootstrap_station,
+      statistic = me_corr_rsd_amt_stats,
+      R = 10000,
+      l = 3
+    )
+  ) %>%
+  dplyr::select(station, bootstrap) %>%
+  unnest(bootstrap)
+
+# Max rain
+zim_annual_max_rain_wide <- zim_annual_amt_wide %>%
+  dplyr::select(station, source, s_year, max_rain, Gauge = max_rain_station) %>%
+  pivot_wider(names_from = source, values_from = max_rain) %>%
+  arrange(station, s_year)
+
+annual_max_rain_cis <- zim_annual_max_rain_wide %>%
+  group_by(station) %>%
+  nest() %>%
+  mutate(
+    bootstrap = map(
+      data,
+      annual_amt_bootstrap_station,
+      statistic = me_corr_rsd_amt_stats,
+      R = 10000,
+      l = 3
+    )
+  ) %>%
+  dplyr::select(station, bootstrap) %>%
+  unnest(bootstrap)
+
+annual_amt_cis <- bind_rows(t_rain = annual_t_rain_cis, 
+                            mean_rain = annual_mean_rain_cis, 
+                            max_rain = annual_max_rain_cis, 
+                            .id = "summary")
+
+annual_amt_cis_wide <- annual_amt_cis %>%
+  mutate(
+    statistic = recode(
+      summary,
+      t_rain = "Total rainfall",
+      mean_rain = "Mean rainfall per rain day",
+      max_rain = "Maximum daily rainfall"
+    )
+  ) %>%
+  pivot_longer(
+    cols = c(
+      mc_loci_me_diff, mc_loci_me_ci,
+      mc_loci_corr_diff, mc_loci_corr_ci,
+      mc_loci_rsd_diff, mc_loci_rsd_ci,
+      mc_qm_me_diff, mc_qm_me_ci,
+      mc_qm_corr_diff, mc_qm_corr_ci,
+      mc_qm_rsd_diff, mc_qm_rsd_ci
+    ),
+    names_to = c("comparison", "metric", ".value"),
+    names_pattern = "mc_(loci|qm)_(me|corr|rsd)_(diff|ci)"
+  ) %>%
+  mutate(
+    comparison = recode(
+      comparison,
+      loci = "MC LOCI-LOCI",
+      qm = "MC QM-QM"
+    ),
+    metric = recode(
+      metric,
+      me = "ME",
+      corr = "Correlation",
+      rsd = "rSD"
+    ),
+    result = paste0(
+      sprintf("%.2f", diff),
+      " ",
+      ci
+    )
+  ) %>%
+  dplyr::select(statistic, station, comparison, metric, result) %>%
+  pivot_wider(
+    names_from = metric,
+    values_from = result
+  ) %>%
+  arrange(
+    factor(
+      statistic,
+      levels = c(
+        "Total rainfall",
+        "Mean rainfall per rain day",
+        "Maximum daily rainfall"
+      )
+    ),
+    station,
+    comparison
+  )
+
+annual_amt_cis_wide %>%
+  write.csv(here("results", "TableS6CIs.csv"), row.names = FALSE)
+
+
 # Annual total rainfall
 ggplot(zim_annual_amt, 
        aes(x = s_year, y = t_rain, colour = source)) +
@@ -1035,7 +1195,7 @@ ggplot(zim_annual_amt,
   base_theme()
 
 ggsave(here("results", "FigS1.png"), dpi = 600,
-       width = 12, height = 6)
+       bg = "white", width = 12, height = 6)
 
 # Annual mean rainfall
 ggplot(zim_annual_amt, 

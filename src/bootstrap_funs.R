@@ -275,7 +275,7 @@ occ_detection_bootstrap_station <- function(dat, R = 10000) {
       frcst.type = "binary",
       obs.type = "binary"
     )
-    
+
     c(
       pod_diff = mc_ver$POD - loci_qm_ver$POD,
       far_diff = mc_ver$FAR - loci_qm_ver$FAR,
@@ -337,3 +337,149 @@ occ_detection_bootstrap_station <- function(dat, R = 10000) {
     )
   )
 }
+
+# RAINFALL AMOUNTS --------------------------------------------------------
+
+# RMSE Month Mean Rainfall ------------------------------------------------
+
+monthly_rmse_bootstrap_station <- function(dat, R = 10000, l = 3) {
+  
+  monthly_dat <- dat %>%
+    dplyr::select(source, month_abb, year, mean_rain) %>%
+    pivot_wider(
+      names_from = source,
+      values_from = mean_rain
+    ) %>%
+    arrange(year, month_abb)
+  
+  annual_data <- monthly_dat %>%
+    group_by(year) %>%
+    nest() %>%
+    ungroup()
+  
+  statistic <- function(samp_rows) {
+    
+    sampled_data <- dplyr::bind_rows(annual_data$data[samp_rows])
+    
+    sampled_means <- sampled_data %>%
+      group_by(month_abb) %>%
+      summarise(
+        Gauge = mean(Gauge, na.rm = TRUE),
+        LOCI = mean(LOCI, na.rm = TRUE),
+        `MC LOCI` = mean(`MC LOCI`, na.rm = TRUE),
+        QM = mean(QM, na.rm = TRUE),
+        `MC QM` = mean(`MC QM`, na.rm = TRUE),
+        .groups = "drop"
+      )
+    
+    gauge <- sampled_means$Gauge
+    loci <- sampled_means$LOCI
+    mc_loci <- sampled_means$`MC LOCI`
+    qm <- sampled_means$QM
+    mc_qm <- sampled_means$`MC QM`
+    
+    rmse_loci <- sqrt(mean((loci - gauge)^2))
+    rmse_mc_loci <- sqrt(mean((mc_loci - gauge)^2))
+    rmse_qm <- sqrt(mean((qm - gauge)^2))
+    rmse_mc_qm <- sqrt(mean((mc_qm - gauge)^2))
+    
+    c(mc_loci_diff = rmse_mc_loci - rmse_loci,
+      mc_qm_diff   = rmse_mc_qm - rmse_qm)
+  }
+  
+  observed <- statistic(seq_len(nrow(annual_data)))
+  
+  rmse_boot <- tsboot(
+    tseries = seq_len(nrow(annual_data)),
+    statistic = statistic,
+    R = R,
+    l = l,
+    sim = "fixed"
+  )
+  
+  mc_loci_ci <- boot.ci(
+    rmse_boot,
+    conf = 0.95,
+    type = "perc",
+    index = 1
+  )
+  mc_qm_ci <- boot.ci(
+    rmse_boot,
+    conf = 0.95,
+    type = "perc",
+    index = 2
+  )
+  
+  tibble(
+    mc_loci_diff = unname(observed["mc_loci_diff"]),
+    mc_loci_ci = sprintf(
+      "(%.2f, %.2f)",
+      mc_loci_ci$percent[4],
+      mc_loci_ci$percent[5]
+    ),
+    mc_qm_diff = unname(observed["mc_qm_diff"]),
+    mc_qm_ci = sprintf(
+      "(%.2f, %.2f)",
+      mc_qm_ci$percent[4],
+      mc_qm_ci$percent[5]
+    )
+  )
+}
+
+
+# Annual amounts summaries ------------------------------------------------
+
+me_corr_rsd_amt_stats <- function(x) {
+  gauge <- x[, "Gauge"]
+  loci <- x[, "LOCI"]
+  mc_loci <- x[, "MC LOCI"]
+  qm <- x[, "QM"]
+  mc_qm <- x[, "MC QM"]
+  
+  c(mc_loci_me_diff = mean(mc_loci - gauge, na.rm = TRUE) - mean(loci - gauge, na.rm = TRUE),
+    mc_loci_corr_diff = cor(mc_loci, gauge, use = "complete.obs") - cor(loci, gauge, use = "complete.obs"),
+    mc_loci_rsd_diff = hydroGOF::rSD(mc_loci, gauge) - hydroGOF::rSD(loci, gauge),
+    mc_qm_me_diff = mean(mc_qm - gauge, na.rm = TRUE) - mean(qm - gauge, na.rm = TRUE),
+    mc_qm_corr_diff = cor(mc_qm, gauge, use = "complete.obs") - cor(qm, gauge, use = "complete.obs"),
+    mc_qm_rsd_diff = hydroGOF::rSD(mc_qm, gauge) - hydroGOF::rSD(qm, gauge))
+}
+
+annual_amt_bootstrap_station <- function(dat, statistic, R = 10000, l = 3) {
+  
+  x <- dat %>%
+    dplyr::select(Gauge, LOCI, `MC LOCI`, QM, `MC QM`) %>%
+    as.matrix()
+  
+  annual_amt_boot <- tsboot(
+    tseries = x,
+    statistic = statistic,
+    R = R,
+    l = l,
+    sim = "fixed"
+  )
+  
+  observed_diff <- me_corr_rsd_amt_stats(x)
+  
+  mc_loci_me_ci <- boot.ci(annual_amt_boot, conf = 0.95, type = "perc", index = 1)
+  mc_loci_corr_ci <- boot.ci(annual_amt_boot, conf = 0.95, type = "perc", index = 2)
+  mc_loci_rsd_ci <- boot.ci(annual_amt_boot, conf = 0.95, type = "perc", index = 3)
+  mc_qm_me_ci <- boot.ci(annual_amt_boot, conf = 0.95, type = "perc", index = 4)
+  mc_qm_corr_ci <- boot.ci(annual_amt_boot, conf = 0.95, type = "perc", index = 5)
+  mc_qm_rsd_ci <- boot.ci(annual_amt_boot, conf = 0.95, type = "perc", index = 6)
+  
+  tibble(
+    mc_loci_me_diff = observed_diff["mc_loci_me_diff"],
+    mc_loci_me_ci = sprintf("(%.2f, %.2f)", mc_loci_me_ci$percent[4], mc_loci_me_ci$percent[5]),
+    mc_loci_corr_diff = observed_diff["mc_loci_corr_diff"],
+    mc_loci_corr_ci = sprintf("(%.2f, %.2f)", mc_loci_corr_ci$percent[4], mc_loci_corr_ci$percent[5]),
+    mc_loci_rsd_diff = observed_diff["mc_loci_rsd_diff"],
+    mc_loci_rsd_ci = sprintf("(%.2f, %.2f)", mc_loci_rsd_ci$percent[4], mc_loci_rsd_ci$percent[5]),
+    mc_qm_me_diff = observed_diff["mc_qm_me_diff"],
+    mc_qm_me_ci = sprintf("(%.2f, %.2f)", mc_qm_me_ci$percent[4], mc_qm_me_ci$percent[5]),
+    mc_qm_corr_diff = observed_diff["mc_qm_corr_diff"],
+    mc_qm_corr_ci = sprintf("(%.2f, %.2f)", mc_qm_corr_ci$percent[4], mc_qm_corr_ci$percent[5]),
+    mc_qm_rsd_diff = observed_diff["mc_qm_rsd_diff"],
+    mc_qm_rsd_ci = sprintf("(%.2f, %.2f)", mc_qm_rsd_ci$percent[4], mc_qm_rsd_ci$percent[5])
+  )
+}
+
