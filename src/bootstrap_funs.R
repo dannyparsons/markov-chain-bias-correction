@@ -92,7 +92,7 @@ ks_bootstrap_station <- function(dat, R = 10000, l = 3, col) {
 
 # 1st order MC RMSE -------------------------------------------------------
 
-mc_first_rmse_bootstrap_station <- function(dat, R = 10000, l = 3,
+mc_first_rmse_bootstrap_station <- function(dat, R = 10000,
                                             parallel = "no", ncpus = 6) {
   print("station")
   
@@ -237,7 +237,6 @@ mc_first_rmse_bootstrap_station <- function(dat, R = 10000, l = 3,
     )
   )
 }
-
 
 # Rainfall occurrence detection -------------------------------------------
 
@@ -483,3 +482,142 @@ annual_amt_bootstrap_station <- function(dat, statistic, R = 10000, l = 3) {
   )
 }
 
+
+# Zero order MC Amounts RMSE ----------------------------------------------
+
+mc_zero_amt_rmse_bootstrap_station <- function(dat, R = 10000) {
+  print("station")
+  
+  fm <- rr ~ 
+    sin(2 * pi * s_doy / 366) + cos(2 * pi * s_doy / 366) +
+    sin(4 * pi * s_doy / 366) + cos(4 * pi * s_doy / 366) 
+  
+  # Prediction data
+  doy_df <- tibble(s_doy = 1:366)
+  
+  annual_data <- dat %>%
+    arrange(s_year, source, s_doy) %>%
+    group_by(s_year, source) %>%
+    nest() %>%
+    ungroup()
+  
+  gauge_annual <- annual_data %>%
+    filter(source == "Gauge") %>%
+    arrange(s_year)
+  
+  loci_annual <- annual_data %>%
+    filter(source == "LOCI") %>%
+    arrange(s_year)
+  
+  mc_loci_annual <- annual_data %>%
+    filter(source == "MC LOCI") %>%
+    arrange(s_year)
+
+  qm_annual <- annual_data %>%
+    filter(source == "QM") %>%
+    arrange(s_year)
+  
+  mc_qm_annual <- annual_data %>%
+    filter(source == "MC QM") %>%
+    arrange(s_year)
+  
+  statistic <- function(dat, samp_rows) {
+    gauge_data <- dplyr::bind_rows(gauge_annual$data[samp_rows])
+    loci_data <- dplyr::bind_rows(loci_annual$data[samp_rows])
+    mc_loci_data <- dplyr::bind_rows(mc_loci_annual$data[samp_rows])
+    qm_data <- dplyr::bind_rows(qm_annual$data[samp_rows])
+    mc_qm_data <- dplyr::bind_rows(mc_qm_annual$data[samp_rows])
+    
+    fit_gauge <- glm(
+      fm,
+      data = gauge_data,
+      family = Gamma(link = "log")
+    )
+    fit_loci <- glm(
+      fm,
+      data = loci_data,
+      family = Gamma(link = "log")
+    )
+    fit_mc_loci <- glm(
+      fm,
+      data = mc_loci_data,
+      family = Gamma(link = "log")
+    )
+    fit_qm <- glm(
+      fm,
+      data = qm_data,
+      family = Gamma(link = "log")
+    )
+    fit_mc_qm <- glm(
+      fm,
+      data = mc_qm_data,
+      family = Gamma(link = "log")
+    )
+    
+    X_pred <- model.matrix(
+      delete.response(terms(fit_gauge)),
+      data = doy_df
+    )
+    gauge <- exp(X_pred %*% coef(fit_gauge))
+    loci <- exp(X_pred %*% coef(fit_loci))
+    mc_loci <- exp(X_pred %*% coef(fit_mc_loci))
+    qm <- exp(X_pred %*% coef(fit_qm))
+    mc_qm <- exp(X_pred %*% coef(fit_mc_qm))
+    
+    rmse_loci <- sqrt(
+      mean((gauge - loci)^2)
+    )
+    rmse_mc_loci <- sqrt(
+      mean((gauge - mc_loci)^2)
+    )
+    rmse_qm <- sqrt(
+      mean((gauge - qm)^2)
+    )
+    rmse_mc_qm <- sqrt(
+      mean((gauge - mc_qm)^2)
+    )
+    
+    c(rmse_mc_loci_diff = rmse_mc_loci - rmse_loci,
+      rmse_mc_qm_diff = rmse_mc_qm - rmse_qm)
+  }
+  
+  ann_rows <- 1:nrow(annual_data)
+  observed <- statistic(annual_data, ann_rows)
+  
+  rmse_boot <- boot(
+    data = ann_rows,
+    statistic = statistic,
+    R = R, 
+    parallel = "snow",
+    ncpus = 8
+  )
+  
+  rmse_mc_loci_ci <- boot.ci(
+    rmse_boot,
+    conf = 0.95,
+    type = "perc",
+    index = 1
+  )
+  
+  rmse_mc_qm_ci <- boot.ci(
+    rmse_boot,
+    conf = 0.95,
+    type = "perc",
+    index = 2
+  )
+  
+  tibble(
+    rmse_mc_loci_diff = unname(observed["rmse_mc_loci_diff"]),
+    rmse_mc_loci_ci = sprintf(
+      "(%.2f, %.2f)",
+      rmse_mc_loci_ci$percent[4],
+      rmse_mc_loci_ci$percent[5]
+    ),
+    rmse_mc_qm_diff = unname(observed["rmse_mc_qm_diff"]),
+    rmse_mc_qm_ci = sprintf(
+      "(%.2f, %.2f)",
+      rmse_mc_qm_ci$percent[4],
+      rmse_mc_qm_ci$percent[5]
+    )
+  )
+}

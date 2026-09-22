@@ -1268,7 +1268,7 @@ fitted_doy_df_0_amounts <- bind_rows(fitted_list)
 
 ggplot(fitted_doy_df_0_amounts, 
        aes(x = s_doy_date, y = fitted, color = source)) +
-  geom_line(size = 0.8) +
+  geom_line(linewidth = 0.8) +
   scale_x_date(date_breaks = "2 months", date_labels = "%b") +
   facet_wrap(vars(station), axes = "all_x") +
   labs(
@@ -1280,8 +1280,8 @@ ggplot(fitted_doy_df_0_amounts,
   col_scale_amt + 
   base_theme()
 
-ggsave(here("results", "Fig16.jpeg"),
-       width = 12, height = 6)
+ggsave(here("results", "Fig16.png"), dpi = 600,
+       bg = "white", width = 12, height = 6)
 
 rain_ref <- fitted_doy_df_0_amounts %>%
   filter(source == "Gauge") %>%
@@ -1297,6 +1297,29 @@ rmse_rain_amounts_0 <- fitted_doy_df_0_amounts %>%
 rmse_rain_amounts_0 %>%
   mutate(across(where(is.numeric), ~ sprintf("%.2f", .x))) %>%
   write.csv(here("results", "Table12.csv"), row.names = FALSE)
+
+# Boostrap CIs for annual summaries (Table S6)
+
+set.seed(6)
+source(here("src", "bootstrap_funs.R"))
+
+mc_zero_amt_rmse_cis <- zimbabwe_bc_stack_amt %>%
+  filter(rainday) %>%
+  group_by(station) %>%
+  nest() %>%
+  mutate(
+    bootstrap = map(
+      data,
+      mc_zero_amt_rmse_bootstrap_station,
+      R = 10000
+    )
+  ) %>%
+  dplyr::select(station, bootstrap) %>%
+  unnest(bootstrap)
+
+mc_zero_amt_rmse_cis %>%
+  mutate(across(where(is.numeric), ~ sprintf("%.2f", .x))) %>%
+  write.csv(here("results", "Table12CIs.csv"), row.names = FALSE)
 
 # By block
 
