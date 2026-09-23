@@ -674,7 +674,7 @@ ggplot(rmse_rainday_1,
 ggsave(here("results", "Fig10.png"), bg = "white",
        dpi = 600, width = 12, height = 6)
 
-# First order RMSE CIs
+# First order RMSE CIs (Table S3)
 
 source(here("src", "bootstrap_funs.R"))
 set.seed(6)
@@ -686,9 +686,7 @@ mc_first_occ_rmse_cis <- zimbabwe_bc_stack_occ %>%
     bootstrap = map(
       data,
       mc_first_rmse_bootstrap_station,
-      R = 10000,
-      parallel = "snow",
-      ncpus = 8
+      R = 10000
     )
   ) %>%
   dplyr::select(station, bootstrap) %>%
@@ -696,6 +694,7 @@ mc_first_occ_rmse_cis <- zimbabwe_bc_stack_occ %>%
 
 mc_first_occ_rmse_cis %>%
   mutate(across(where(is.numeric), ~ sprintf("%.3f", .x))) %>%
+  dplyr::select(-boot)
   write.csv(here("results", "TableS3CIs.csv"), row.names = FALSE)
 
 # By block
@@ -1122,61 +1121,25 @@ annual_amt_cis <- bind_rows(t_rain = annual_t_rain_cis,
                             .id = "summary")
 
 annual_amt_cis_wide <- annual_amt_cis %>%
-  mutate(
-    statistic = recode(
-      summary,
-      t_rain = "Total rainfall",
-      mean_rain = "Mean rainfall per rain day",
-      max_rain = "Maximum daily rainfall"
-    )
-  ) %>%
-  pivot_longer(
-    cols = c(
-      mc_loci_me_diff, mc_loci_me_ci,
-      mc_loci_corr_diff, mc_loci_corr_ci,
-      mc_loci_rsd_diff, mc_loci_rsd_ci,
-      mc_qm_me_diff, mc_qm_me_ci,
-      mc_qm_corr_diff, mc_qm_corr_ci,
-      mc_qm_rsd_diff, mc_qm_rsd_ci
-    ),
-    names_to = c("comparison", "metric", ".value"),
-    names_pattern = "mc_(loci|qm)_(me|corr|rsd)_(diff|ci)"
-  ) %>%
-  mutate(
-    comparison = recode(
-      comparison,
-      loci = "MC LOCI-LOCI",
-      qm = "MC QM-QM"
-    ),
-    metric = recode(
-      metric,
-      me = "ME",
-      corr = "Correlation",
-      rsd = "rSD"
-    ),
-    result = paste0(
-      sprintf("%.2f", diff),
-      " ",
-      ci
-    )
-  ) %>%
+  mutate(statistic = recode(summary, t_rain = "Total rainfall", 
+                            mean_rain = "Mean rainfall per rain day",
+                            max_rain = "Maximum daily rainfall")) %>%
+  pivot_longer(cols = c(mc_loci_me_diff, mc_loci_me_ci,
+                        mc_loci_corr_diff, mc_loci_corr_ci,
+                        mc_loci_rsd_diff, mc_loci_rsd_ci,
+                        mc_qm_me_diff, mc_qm_me_ci,
+                        mc_qm_corr_diff, mc_qm_corr_ci,
+                        mc_qm_rsd_diff, mc_qm_rsd_ci),
+               names_to = c("comparison", "metric", ".value"),
+               names_pattern = "mc_(loci|qm)_(me|corr|rsd)_(diff|ci)") %>%
+  mutate(comparison = recode(comparison, loci = "MC LOCI-LOCI", qm = "MC QM-QM"),
+         metric = recode(metric, me = "ME", corr = "Correlation", rsd = "rSD"),
+         result = paste0(sprintf("%.2f", diff), " ", ci)) %>%
   dplyr::select(statistic, station, comparison, metric, result) %>%
-  pivot_wider(
-    names_from = metric,
-    values_from = result
-  ) %>%
-  arrange(
-    factor(
-      statistic,
-      levels = c(
-        "Total rainfall",
-        "Mean rainfall per rain day",
-        "Maximum daily rainfall"
-      )
-    ),
-    station,
-    comparison
-  )
+  pivot_wider(names_from = metric, values_from = result) %>%
+  arrange(factor(statistic, 
+                 levels = c("Total rainfall", "Mean rainfall per rain day", "Maximum daily rainfall")),
+          station, comparison)
 
 annual_amt_cis_wide %>%
   write.csv(here("results", "TableS6CIs.csv"), row.names = FALSE)
@@ -1298,13 +1261,12 @@ rmse_rain_amounts_0 %>%
   mutate(across(where(is.numeric), ~ sprintf("%.2f", .x))) %>%
   write.csv(here("results", "Table12.csv"), row.names = FALSE)
 
-# Boostrap CIs for annual summaries (Table S6)
+# Boostrap CIs for zero order MC amounts RMSE (Table 12)
 
 set.seed(6)
 source(here("src", "bootstrap_funs.R"))
 
 mc_zero_amt_rmse_cis <- zimbabwe_bc_stack_amt %>%
-  filter(rainday) %>%
   group_by(station) %>%
   nest() %>%
   mutate(
@@ -1319,6 +1281,7 @@ mc_zero_amt_rmse_cis <- zimbabwe_bc_stack_amt %>%
 
 mc_zero_amt_rmse_cis %>%
   mutate(across(where(is.numeric), ~ sprintf("%.2f", .x))) %>%
+  dplyr::select(-boot) %>%
   write.csv(here("results", "Table12CIs.csv"), row.names = FALSE)
 
 # By block
@@ -1461,6 +1424,41 @@ ggplot(rmse_rain_amounts_1,
 
 ggsave(here("results", "Fig18.jpeg"),
        width = 12, height = 6)
+
+# Boostrap CIs for 1st order MC amounts RMSE (Table S4)
+
+set.seed(6)
+source(here("src", "bootstrap_funs.R"))
+
+mc_first_amt_rmse_cis <- zimbabwe_bc_stack_amt %>%
+  filter(rainday) %>%
+  group_by(station) %>%
+  nest() %>%
+  mutate(
+    bootstrap = map(
+      data,
+      mc_first_amt_rmse_bootstrap_station,
+      R = 10000
+    )
+  ) %>%
+  dplyr::select(station, bootstrap) %>%
+  unnest(bootstrap)
+
+mc_first_amt_rmse_cis_wide <- mc_first_amt_rmse_cis %>%
+  dplyr::select(-boot) %>%
+  pivot_longer(cols = -station,
+               names_to = c("comparison", "previous_day", ".value"),
+               names_pattern = "rmse_mc_(loci|qm)_(w|d)_(diff|ci)") %>%
+  mutate(previous_day = factor(recode(previous_day, w = "Rain", d = "No Rain"),
+                               levels = c("Rain", "No Rain"))) %>%
+  pivot_wider(names_from = comparison, values_from = c(diff, ci),
+              names_glue = "{comparison}_{.value}") %>%
+  dplyr::select(station, previous_day, loci_diff, loci_ci, qm_diff, qm_ci) %>%
+  arrange(station, previous_day)
+
+mc_first_amt_rmse_cis_wide %>%
+  mutate(across(where(is.numeric), ~ sprintf("%.2f", .x))) %>%
+  write.csv(here("results", "TableS7CIs.csv"), row.names = FALSE)
 
 # By block
 
