@@ -33,7 +33,8 @@ nrain_bootstrap_station <- function(dat, statistic, R = 10000, l = 3) {
   )
 }
 
-ks_bootstrap_station <- function(dat, R = 10000, l = 3, col) {
+ks_bootstrap_station <- function(dat, R = 10000, col) {
+  print("station")
   
   # Nested to have one row per year
   # so that bootstrap sampling is done on the years
@@ -44,7 +45,7 @@ ks_bootstrap_station <- function(dat, R = 10000, l = 3, col) {
     ungroup()
   
   year_source <- dat_nested$data %>%
-    map(~ list(
+    purrr::map(~ list(
       gauge = .x[[col]][.x$source == "Gauge"],
       loci_qm = .x[[col]][.x$source == "LOCI/QM"],
       mc = .x[[col]][.x$source == "MC"]
@@ -55,37 +56,35 @@ ks_bootstrap_station <- function(dat, R = 10000, l = 3, col) {
   year_ts <- 1:n_years
   
   # Statistic function receives the resampled row numbers
-  statistic <- function(samp_rows) {
+  statistic <- function(data, samp_rows) {
     
     sampled <- year_source[samp_rows]
-    gauge <- unlist(map(sampled, "gauge"), use.names = FALSE)
-    loci_qm <- unlist(map(sampled, "loci_qm"), use.names = FALSE)
-    mc <- unlist(map(sampled, "mc"), use.names = FALSE)
+    gauge <- unlist(purrr::map(sampled, "gauge"), use.names = FALSE)
+    loci_qm <- unlist(purrr::map(sampled, "loci_qm"), use.names = FALSE)
+    mc <- unlist(purrr::map(sampled, "mc"), use.names = FALSE)
     c(ks_diff = unname(ks.test(mc, gauge)$statistic - ks.test(loci_qm, gauge)$statistic))
   }
   
-  # Observed statistic
-  observed <- statistic(year_ts)
+  observed <- statistic(dat_nested, year_ts)
   
-  # bootstrap
-  ks_boot <- tsboot(
-    tseries = year_ts,
+  ks_boot <- boot::boot(
+    data = year_ts,
     statistic = statistic,
     R = R,
-    l = l,
-    sim = "fixed"
+    parallel = "snow",
+    ncpus = 8
   )
-  
   ks_ci <- boot.ci(
     ks_boot,
     conf = 0.95,
-    type = "perc",
+    type = "bca",
     index = 1
   )
   
   tibble(
     ks_diff = observed["ks_diff"],
-    ks_ci = sprintf("(%.3f, %.3f)", ks_ci$percent[4], ks_ci$percent[5])
+    ks_ci = sprintf("(%.3f, %.3f)", ks_ci$bca[4], ks_ci$bca[5]),
+    boot = list(ks_boot)
   )
 }
 
@@ -131,6 +130,12 @@ mc_first_rmse_bootstrap_station <- function(dat, R = 10000) {
     filter(source == "MC") %>%
     arrange(s_year)
   
+  stopifnot(
+    identical(gauge_annual$s_year, loci_qm_annual$s_year),
+    identical(gauge_annual$s_year, mc_annual$s_year),
+    nrow(gauge_annual) == length(unique(dat$s_year))
+  )
+  
   statistic <- function(dat, samp_rows) {
     gauge_data <- dplyr::bind_rows(gauge_annual$data[samp_rows])
     loci_qm_data <- dplyr::bind_rows(loci_qm_annual$data[samp_rows])
@@ -156,41 +161,22 @@ mc_first_rmse_bootstrap_station <- function(dat, R = 10000) {
       delete.response(terms(fit_gauge)),
       data = doy_df_w
     )
-    gauge_w <- plogis(
-      X_pred_w %*% coef(fit_gauge)
-    )
-    loci_qm_w <- plogis(
-      X_pred_w %*% coef(fit_loci_qm)
-    )
-    mc_w <- plogis(
-      X_pred_w %*% coef(fit_mc)
-    )
+    gauge_w <- plogis(X_pred_w %*% coef(fit_gauge))
+    loci_qm_w <- plogis(X_pred_w %*% coef(fit_loci_qm))
+    mc_w <- plogis(X_pred_w %*% coef(fit_mc))
+    
     X_pred_d <- model.matrix(
       delete.response(terms(fit_gauge)),
       data = doy_df_d
     )
-    gauge_d <- plogis(
-      X_pred_d %*% coef(fit_gauge)
-    )
-    loci_qm_d <- plogis(
-      X_pred_d %*% coef(fit_loci_qm)
-    )
-    mc_d <- plogis(
-      X_pred_d %*% coef(fit_mc)
-    )
+    gauge_d <- plogis(X_pred_d %*% coef(fit_gauge))
+    loci_qm_d <- plogis(X_pred_d %*% coef(fit_loci_qm))
+    mc_d <- plogis(X_pred_d %*% coef(fit_mc))
     
-    rmse_loci_qm_w <- sqrt(
-      mean((gauge_w - loci_qm_w)^2)
-    )
-    rmse_loci_qm_d <- sqrt(
-      mean((gauge_d - loci_qm_d)^2)
-    )
-    rmse_mc_w <- sqrt(
-      mean((gauge_w - mc_w)^2)
-    )
-    rmse_mc_d <- sqrt(
-      mean((gauge_d - mc_d)^2)
-    )
+    rmse_loci_qm_w <- sqrt(mean((gauge_w - loci_qm_w)^2))
+    rmse_loci_qm_d <- sqrt(mean((gauge_d - loci_qm_d)^2))
+    rmse_mc_w <- sqrt(mean((gauge_w - mc_w)^2))
+    rmse_mc_d <- sqrt(mean((gauge_d - mc_d)^2))
     
     c(rmse_w_diff = rmse_mc_w - rmse_loci_qm_w,
       rmse_d_diff = rmse_mc_d - rmse_loci_qm_d)
@@ -210,14 +196,14 @@ mc_first_rmse_bootstrap_station <- function(dat, R = 10000) {
   rmse_w_ci <- boot.ci(
     rmse_boot,
     conf = 0.95,
-    type = "perc",
+    type = "bca",
     index = 1
   )
 
   rmse_d_ci <- boot.ci(
     rmse_boot,
     conf = 0.95,
-    type = "perc",
+    type = "bca",
     index = 2
   )
   
@@ -225,14 +211,14 @@ mc_first_rmse_bootstrap_station <- function(dat, R = 10000) {
     rmse_w_diff = unname(observed["rmse_w_diff"]),
     rmse_w_ci = sprintf(
       "(%.3f, %.3f)",
-      rmse_w_ci$percent[4],
-      rmse_w_ci$percent[5]
+      rmse_w_ci$bca[4],
+      rmse_w_ci$bca[5]
     ),
     rmse_d_diff = unname(observed["rmse_d_diff"]),
     rmse_d_ci = sprintf(
       "(%.3f, %.3f)",
-      rmse_d_ci$percent[4],
-      rmse_d_ci$percent[5]
+      rmse_d_ci$bca[4],
+      rmse_d_ci$bca[5]
     ),
     boot = list(rmse_boot)
   )
@@ -331,7 +317,8 @@ occ_detection_bootstrap_station <- function(dat, R = 10000) {
       "(%.3f, %.3f)",
       hss_ci$bca[4],
       hss_ci$bca[5]
-    )
+    ),
+    boot = list(occ_boot)
   )
 }
 
@@ -575,18 +562,10 @@ mc_zero_amt_rmse_bootstrap_station <- function(dat, R = 10000) {
     qm <- exp(X_pred %*% coef(fit_qm))
     mc_qm <- exp(X_pred %*% coef(fit_mc_qm))
     
-    rmse_loci <- sqrt(
-      mean((gauge - loci)^2)
-    )
-    rmse_mc_loci <- sqrt(
-      mean((gauge - mc_loci)^2)
-    )
-    rmse_qm <- sqrt(
-      mean((gauge - qm)^2)
-    )
-    rmse_mc_qm <- sqrt(
-      mean((gauge - mc_qm)^2)
-    )
+    rmse_loci <- sqrt(mean((gauge - loci)^2))
+    rmse_mc_loci <- sqrt(mean((gauge - mc_loci)^2))
+    rmse_qm <- sqrt(mean((gauge - qm)^2))
+    rmse_mc_qm <- sqrt(mean((gauge - mc_qm)^2))
     
     c(rmse_mc_loci_diff = rmse_mc_loci - rmse_loci,
       rmse_mc_qm_diff = rmse_mc_qm - rmse_qm)
@@ -820,4 +799,140 @@ mc_first_amt_rmse_bootstrap_station <- function(dat, R = 10000) {
     ),
     boot = list(rmse_boot)
   )
+}
+
+# POD and HSS for rainfall categories -------------------------------------
+
+amt_detection_bootstrap_station <- function(dat, R = 10000) {
+  print("station")
+  
+  annual_data <- dat %>%
+    arrange(s_year, source, date) %>%
+    group_by(s_year, source) %>%
+    nest() %>%
+    ungroup()
+  
+  loci_annual <- annual_data %>%
+    filter(source == "LOCI") %>%
+    arrange(s_year)
+  
+  mc_loci_annual <- annual_data %>%
+    filter(source == "MC LOCI") %>%
+    arrange(s_year)
+  
+  qm_annual <- annual_data %>%
+    filter(source == "QM") %>%
+    arrange(s_year)
+  
+  mc_qm_annual <- annual_data %>%
+    filter(source == "MC QM") %>%
+    arrange(s_year)
+  
+  stopifnot(
+    identical(loci_annual$s_year, mc_loci_annual$s_year),
+    identical(loci_annual$s_year, qm_annual$s_year),
+    identical(loci_annual$s_year, mc_qm_annual$s_year)
+  )
+  
+  statistic <- function(data, samp_rows) {
+    
+    loci_data <- dplyr::bind_rows(loci_annual$data[samp_rows])
+    mc_loci_data <- dplyr::bind_rows(mc_loci_annual$data[samp_rows])
+    qm_data <- dplyr::bind_rows(qm_annual$data[samp_rows])
+    mc_qm_data <- dplyr::bind_rows(mc_qm_annual$data[samp_rows])
+    
+    calc_stats <- function(x) {
+      
+      pod_no <- sum(x$rain_cat == "No Rain" & x$rain_cat_station == "No Rain", na.rm = TRUE) /
+        sum(x$rain_cat_station == "No Rain", na.rm = TRUE)
+      pod_light <- sum(x$rain_cat == "Light Rain" & x$rain_cat_station == "Light Rain", na.rm = TRUE) /
+        sum(x$rain_cat_station == "Light Rain", na.rm = TRUE)
+      pod_moderate <- sum(x$rain_cat == "Moderate Rain" & x$rain_cat_station == "Moderate Rain", na.rm = TRUE) /
+        sum(x$rain_cat_station == "Moderate Rain", na.rm = TRUE)
+      pod_heavy <- sum(x$rain_cat == "Heavy Rain" & x$rain_cat_station == "Heavy Rain", na.rm = TRUE) /
+        sum(x$rain_cat_station == "Heavy Rain", na.rm = TRUE)
+      pod_very_heavy <- sum(x$rain_cat == "Very Heavy Rain" & x$rain_cat_station == "Very Heavy Rain", na.rm = TRUE) /
+        sum(x$rain_cat_station == "Very Heavy Rain", na.rm = TRUE)
+      ver <- verification::verify(x$rain_cat_station, x$rain_cat, frcst.type = "cat", obs.type = "cat")
+      
+      c(
+        pod_no = pod_no,
+        pod_light = pod_light,
+        pod_moderate = pod_moderate,
+        pod_heavy = pod_heavy,
+        pod_very_heavy = pod_very_heavy,
+        hss = ver$hss
+      )
+    }
+    
+    loci_stats <- calc_stats(loci_data)
+    mc_loci_stats <- calc_stats(mc_loci_data)
+    qm_stats <- calc_stats(qm_data)
+    mc_qm_stats <- calc_stats(mc_qm_data)
+    
+    c(
+      pod_no_mc_loci_diff = mc_loci_stats["pod_no"] - loci_stats["pod_no"],
+      pod_no_mc_qm_diff = mc_qm_stats["pod_no"] - qm_stats["pod_no"],
+      pod_light_mc_loci_diff = mc_loci_stats["pod_light"] - loci_stats["pod_light"],
+      pod_light_mc_qm_diff = mc_qm_stats["pod_light"] - qm_stats["pod_light"],
+      pod_moderate_mc_loci_diff = mc_loci_stats["pod_moderate"] - loci_stats["pod_moderate"],
+      pod_moderate_mc_qm_diff = mc_qm_stats["pod_moderate"] - qm_stats["pod_moderate"],
+      pod_heavy_mc_loci_diff = mc_loci_stats["pod_heavy"] - loci_stats["pod_heavy"],
+      pod_heavy_mc_qm_diff = mc_qm_stats["pod_heavy"] - qm_stats["pod_heavy"],
+      pod_very_heavy_mc_loci_diff = mc_loci_stats["pod_very_heavy"] - loci_stats["pod_very_heavy"],
+      pod_very_heavy_mc_qm_diff = mc_qm_stats["pod_very_heavy"] - qm_stats["pod_very_heavy"],
+      hss_mc_loci_diff = mc_loci_stats["hss"] - loci_stats["hss"],
+      hss_mc_qm_diff = mc_qm_stats["hss"] - qm_stats["hss"]
+    )
+  }
+  
+  ann_rows <- seq_len(nrow(loci_annual))
+  observed <- statistic(annual_data, ann_rows)
+  
+  amt_boot <- boot::boot(
+    data = ann_rows,
+    statistic = statistic,
+    R = R,
+    parallel = "snow",
+    ncpus = 8
+  )
+  
+  cis <- lapply(seq_len(12), function(i) {
+    tryCatch(
+      boot::boot.ci(amt_boot, conf = 0.95, type = "bca", index = i),
+      error = function(e) NULL
+    )
+  })
+  get_ci <- function(ci) {
+    if (is.null(ci) || is.null(ci$bca)) return(NA_character_)
+    sprintf("(%.3f, %.3f)", ci$bca[4], ci$bca[5])
+  }
+  tibble(
+    pod_no_mc_loci_diff = unname(observed[1]),
+    pod_no_mc_loci_ci = get_ci(cis[[1]]),
+    pod_no_mc_qm_diff = unname(observed[2]),
+    pod_no_mc_qm_ci = get_ci(cis[[2]]),
+    pod_light_mc_loci_diff = unname(observed[3]),
+    pod_light_mc_loci_ci = get_ci(cis[[3]]),
+    pod_light_mc_qm_diff = unname(observed[4]),
+    pod_light_mc_qm_ci = get_ci(cis[[4]]),
+    pod_moderate_mc_loci_diff = unname(observed[5]),
+    pod_moderate_mc_loci_ci = get_ci(cis[[5]]),
+    pod_moderate_mc_qm_diff = unname(observed[6]),
+    pod_moderate_mc_qm_ci = get_ci(cis[[6]]),
+    pod_heavy_mc_loci_diff = unname(observed[7]),
+    pod_heavy_mc_loci_ci = get_ci(cis[[7]]),
+    pod_heavy_mc_qm_diff = unname(observed[8]),
+    pod_heavy_mc_qm_ci = get_ci(cis[[8]]),
+    pod_very_heavy_mc_loci_diff = unname(observed[9]),
+    pod_very_heavy_mc_loci_ci = get_ci(cis[[9]]),
+    pod_very_heavy_mc_qm_diff = unname(observed[10]),
+    pod_very_heavy_mc_qm_ci = get_ci(cis[[10]]),
+    hss_mc_loci_diff = unname(observed[11]),
+    hss_mc_loci_ci = get_ci(cis[[11]]),
+    hss_mc_qm_diff = unname(observed[12]),
+    hss_mc_qm_ci = get_ci(cis[[12]]),
+    boot = list(amt_boot)
+  )
+  
 }

@@ -341,6 +341,7 @@ ks_results_wet %>%
 
 # Bootstrap CIs for wet spells K-S (Table 8)
 set.seed(6)
+source(here("src", "bootstrap_funs.R"))
 
 wet_ks_cis <- wet_spells %>%
   group_by(station) %>%
@@ -350,7 +351,6 @@ wet_ks_cis <- wet_spells %>%
       data,
       ks_bootstrap_station,
       R = 10000,
-      l = 3,
       col = "wet_spell_length"
     )
   ) %>%
@@ -359,9 +359,9 @@ wet_ks_cis <- wet_spells %>%
 
 wet_ks_cis  %>%
   mutate(across(where(is.numeric), ~ sprintf("%.3f", .x))) %>%
+  dplyr::select(-boot) %>%
   #TODO Update table name once finalised
   write.csv(here("results", "Table8CIs.csv"), row.names = FALSE)
-
 
 ggplot(dry_spells, aes(x = dry_spell_length, colour = source)) +
   stat_ecdf(linewidth = 1) +
@@ -403,6 +403,7 @@ ks_results_dry %>%
 
 # Bootstrap CIs for dry spells K-S (Table 9)
 set.seed(6)
+source(here("src", "bootstrap_funs.R"))
 
 dry_ks_cis <- dry_spells %>%
   group_by(station) %>%
@@ -412,7 +413,6 @@ dry_ks_cis <- dry_spells %>%
       data,
       ks_bootstrap_station,
       R = 10000,
-      l = 3,
       col = "dry_spell_length"
     )
   ) %>%
@@ -421,6 +421,7 @@ dry_ks_cis <- dry_spells %>%
 
 dry_ks_cis  %>%
   mutate(across(where(is.numeric), ~ sprintf("%.3f", .x))) %>%
+  dplyr::select(-boot) %>%
   #TODO Update table name once finalised
   write.csv(here("results", "Table9CIs.csv"), row.names = FALSE)
 
@@ -694,7 +695,7 @@ mc_first_occ_rmse_cis <- zimbabwe_bc_stack_occ %>%
 
 mc_first_occ_rmse_cis %>%
   mutate(across(where(is.numeric), ~ sprintf("%.3f", .x))) %>%
-  dplyr::select(-boot)
+  dplyr::select(-boot) %>%
   write.csv(here("results", "TableS3CIs.csv"), row.names = FALSE)
 
 # By block
@@ -1538,7 +1539,7 @@ station_block_summaries_amounts %>%
 
 cat_labs <- c("No Rain", "Light Rain", 
               "Moderate Rain", "Heavy Rain", 
-              "Violent Rain")
+              "Very Heavy Rain")
 
 zimbabwe_bc_stack_amt <- zimbabwe_bc_stack_amt %>%
   mutate(rain_cat = cut(rr, c(0, 0.85, 5, 20, 40, Inf), include.lowest = TRUE,
@@ -1563,12 +1564,26 @@ zimbabwe_pod_hss_amt <- zimbabwe_bc_stack_amt_wide %>%
     pod_light = sum(rain_cat == "Light Rain" & rain_cat_station == "Light Rain", na.rm = TRUE) / sum(rain_cat_station == "Light Rain", na.rm = TRUE),
     pod_moderate = sum(rain_cat == "Moderate Rain" & rain_cat_station == "Moderate Rain", na.rm = TRUE) / sum(rain_cat_station == "Moderate Rain", na.rm = TRUE),
     pod_heavy = sum(rain_cat == "Heavy Rain" & rain_cat_station == "Heavy Rain", na.rm = TRUE) / sum(rain_cat_station == "Heavy Rain", na.rm = TRUE),
-    pod_violent = sum(rain_cat == "Violent Rain" & rain_cat_station == "Violent Rain", na.rm = TRUE) / sum(rain_cat_station == "Violent Rain", na.rm = TRUE),
+    pod_very_heavy = sum(rain_cat == "Very Heavy Rain" & rain_cat_station == "Very Heavy Rain", na.rm = TRUE) / sum(rain_cat_station == "Very Heavy Rain", na.rm = TRUE),
     ver = list(verify(rain_cat_station, rain_cat, frcst.type = "cat",
                       obs.type = "cat")),
     hss = map_dbl(ver, ~ .x$hss))
 
-zimbabwe_pod_hss_amt_format <- zimbabwe_pod_hss_amt %>%
+# Table S8
+zimbabwe_pod_hss_amt %>%
+  dplyr::select(-ver) %>%
+  rename(
+    `No Rain` = pod_no,
+    `Light Rain` = pod_light,
+    `Moderate Rain` = pod_moderate,
+    `Heavy Rain` = pod_heavy,
+    `Very Heavy Rain` = pod_very_heavy,
+    HSS = hss
+  ) %>%
+  mutate(across(where(is.numeric), ~ sprintf("%.3f", .x))) %>%
+  write.csv(here("results", "TableS8.csv"), row.names = FALSE)
+
+  zimbabwe_pod_hss_amt_format <- zimbabwe_pod_hss_amt %>%
   dplyr::select(-ver) %>%
   pivot_wider(names_from = source, values_from = hss)
 
@@ -1582,8 +1597,8 @@ zimbabwe_pod_hss_amt_long <- zimbabwe_pod_hss_amt %>%
   mutate(
     metric = gsub("pod_", "", metric),
     metric = factor(metric,
-                      levels = c("no", "light", "moderate", "heavy", "violent", "hss"),
-                      labels = c("No Rain", "Light Rain", "Moderate Rain", "Heavy Rain", "Violent Rain", "HSS"))
+                    levels = c("no", "light", "moderate", "heavy", "very_heavy", "hss"),
+                    labels = c("No Rain", "Light Rain", "Moderate Rain", "Heavy Rain", "Very Heavy Rain", "HSS"))
   )
 
 ggplot(zimbabwe_pod_hss_amt_long, aes(x = metric, y = value, fill = source)) +
@@ -1600,5 +1615,50 @@ ggplot(zimbabwe_pod_hss_amt_long, aes(x = metric, y = value, fill = source)) +
     axis.text.x = element_text(angle = 25, hjust = 1),
   )
 
-ggsave(here("results", "Fig19.jpeg"),
-       width = 12, height = 6)
+ggsave(here("results", "Fig19.png"), dpi = 600,
+       bg = "white", width = 12, height = 6)
+
+# CIs for POD and HSS amounts
+set.seed(6)
+source(here("src", "bootstrap_funs.R"))
+
+amt_detection_cis <- zimbabwe_bc_stack_amt_wide %>%
+  filter(month %in% c(10:12, 1:3)) %>%
+  filter(!is.na(rain_cat) & !is.na(rain_cat_station)) %>%
+  group_by(station) %>%
+  nest() %>%
+  mutate(
+    bootstrap = purrr::map(
+      data, 
+      amt_detection_bootstrap_station, 
+      R = 10000)
+    ) %>%
+  dplyr::select(station, bootstrap) %>%
+  unnest(bootstrap)
+
+amt_detection_table <- amt_detection_cis %>%
+  dplyr::select(-boot) %>%
+  pivot_longer(-station,
+               names_to = c("metric", "comparison", ".value"),
+               names_pattern = "(pod_no|pod_light|pod_moderate|pod_heavy|pod_very_heavy|hss)_(mc_loci|mc_qm)_(diff|ci)") %>%
+  mutate(
+    comparison = recode(comparison,
+                        mc_loci = "MC LOCI - LOCI",
+                        mc_qm = "MC QM - QM"),
+    metric = recode(metric,
+                    pod_no = "No Rain",
+                    pod_light = "Light Rain",
+                    pod_moderate = "Moderate Rain",
+                    pod_heavy = "Heavy Rain",
+                    pod_very_heavy = "Very Heavy Rain",
+                    hss = "HSS"),
+    value = if_else(is.na(ci), sprintf("%.3f (NA)", diff),
+                    paste0(sprintf("%.3f ", diff), ci))) %>%
+  dplyr::select(station, comparison, metric, value) %>%
+  pivot_wider(names_from = metric, values_from = value) %>%
+  dplyr::select(station, comparison, `No Rain`, `Light Rain`, `Moderate Rain`,
+         `Heavy Rain`, `Very Heavy Rain`, HSS)
+
+amt_detection_cis %>%
+  mutate(across(where(is.numeric), ~ sprintf("%.3f", .x))) %>%
+  write.csv(here("results", "TableS8.csv"), row.names = FALSE)
