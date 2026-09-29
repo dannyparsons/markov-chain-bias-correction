@@ -63,6 +63,73 @@ occurrence_source <- c("Gauge", "AgERA5", "LOCI", "MC LOCI")
 
 amounts_source <- c(occurrence_source, "QM", "MC QM")
 
+
+# METHOD VALIDATION -------------------------------------------------------
+
+validation_probs <- zimbabwe_bc_stack %>%
+  ungroup() %>%
+  mutate(season = factor(season, levels = c("dry", 10:12, 1:4))) %>%
+  filter(source %in% c("Gauge", "LOCI", "MC LOCI")) %>%
+  arrange(station, source, block, date) %>%
+  group_by(station, source, block) %>%
+  mutate(rainday_prev = lag(rainday)) %>%
+  group_by(station, source, block, season) %>%
+  summarise(p_0 = mean(rainday, na.rm = TRUE),
+            p_w = mean(rainday[rainday_prev], na.rm = TRUE),
+            p_d = mean(rainday[!rainday_prev], na.rm = TRUE),
+            .groups = "drop")
+
+validation_probs_long <- validation_probs %>%
+  pivot_longer(cols = c(p_0, p_w, p_d), names_to = "ptype", values_to = "p") %>%
+  pivot_wider(names_from = source, values_from = p) %>%
+  pivot_longer(cols = c(LOCI, `MC LOCI`), names_to = "method", values_to = "corrected") %>%
+  rename(obs = Gauge) %>%
+  mutate(
+    ptype = factor(ptype, levels = c("p_0", "p_w", "p_d")),
+    ptype_mc = factor(ifelse(ptype == "p_0", "Unconditional", "Conditional"),
+                      levels = c("Unconditional", "Conditional")),
+    method = recode(method, "LOCI" = "LOCI/QM", "MC LOCI" = "MC"),
+    method = factor(method, levels = c("LOCI/QM", "MC"))
+  )
+
+ggplot(validation_probs_long  %>% filter(ptype_mc == "Conditional"),
+       aes(x = obs, y = corrected, colour = ptype)) +
+  geom_abline() +
+  geom_point() +
+  labs(x = "Observed Probability", y = "Corrected Probability",
+       colour = "Probability") +
+  scale_colour_manual(
+    labels = c(p_0 = expression(p[0]), p_w = expression(p[w]), p_d = expression(p[d])),
+    values = c(p_0 = "#E31A1C", p_d = "dodgerblue2", p_w = "green4")) +
+  coord_fixed(ratio = 1) +
+  facet_grid(rows = vars(method), cols = vars(station), axes = "all_x") +
+  base_theme()
+
+validation_probs_metrics <- validation_probs_long %>%
+  group_by(season, method, ptype) %>%
+  summarise(rmse = sqrt(mean((corrected - obs)^2, na.rm = TRUE)),
+            me = mean(corrected - obs, na.rm = TRUE),
+            .groups = "drop")
+
+validation_probs_rmse_table <- validation_probs_metrics %>%
+  dplyr::select(season, method, ptype, rmse) %>%
+  mutate(rmse = round(rmse, 3)) %>%
+  pivot_wider(names_from = c(ptype, method), values_from = rmse,
+              names_glue = "{ptype}_{method}") %>%
+  dplyr::select(season, `p_0_LOCI/QM`, p_0_MC,
+         `p_w_LOCI/QM`, p_w_MC,
+         `p_d_LOCI/QM`, p_d_MC)
+
+ggplot(validation_probs_metrics,
+       aes(x = ptype, y = rmse, fill = method)) +
+  geom_col(position = position_dodge()) +
+  labs(x = "Probability", y = "RMSE", fill = "Method") +
+  scale_x_discrete(labels = c(p_0 = expression(p[0]),
+                              p_w = expression(p[w]),
+                              p_d = expression(p[d]))) +
+  facet_wrap(~season, nrow = 1) +
+  base_theme()
+
 # RAINFALL OCCURRENCE -----------------------------------------------------
 
 zimbabwe_bc_stack_occ <- zimbabwe_bc_stack %>%
@@ -1636,7 +1703,7 @@ amt_detection_cis <- zimbabwe_bc_stack_amt_wide %>%
   dplyr::select(station, bootstrap) %>%
   unnest(bootstrap)
 
-amt_detection_table <- amt_detection_cis %>%
+amt_detection_cis_table <- amt_detection_cis %>%
   dplyr::select(-boot) %>%
   pivot_longer(-station,
                names_to = c("metric", "comparison", ".value"),
@@ -1659,6 +1726,6 @@ amt_detection_table <- amt_detection_cis %>%
   dplyr::select(station, comparison, `No Rain`, `Light Rain`, `Moderate Rain`,
          `Heavy Rain`, `Very Heavy Rain`, HSS)
 
-amt_detection_cis %>%
+amt_detection_cis_table %>%
   mutate(across(where(is.numeric), ~ sprintf("%.3f", .x))) %>%
-  write.csv(here("results", "TableS8.csv"), row.names = FALSE)
+  write.csv(here("results", "TableS8CIs.csv"), row.names = FALSE)
