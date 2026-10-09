@@ -96,7 +96,7 @@ ggplot(validation_probs_long  %>% filter(ptype_mc == "Conditional"),
        aes(x = obs, y = corrected, colour = ptype)) +
   geom_abline() +
   geom_point() +
-  labs(x = "Observed Probability", y = "Corrected Probability",
+  labs(x = "Gauge Probability", y = "Corrected Probability",
        colour = "Probability") +
   scale_colour_manual(
     labels = c(p_0 = expression(p[0]), p_w = expression(p[w]), p_d = expression(p[d])),
@@ -104,6 +104,9 @@ ggplot(validation_probs_long  %>% filter(ptype_mc == "Conditional"),
   coord_fixed(ratio = 1) +
   facet_grid(rows = vars(method), cols = vars(station), axes = "all_x") +
   base_theme()
+
+ggsave(here("results", "Figyyy.png"), bg = "white",
+       dpi = 600, width = 12, height = 6)
 
 validation_probs_metrics <- validation_probs_long %>%
   group_by(season, method, ptype) %>%
@@ -120,15 +123,9 @@ validation_probs_rmse_table <- validation_probs_metrics %>%
          `p_w_LOCI/QM`, p_w_MC,
          `p_d_LOCI/QM`, p_d_MC)
 
-ggplot(validation_probs_metrics,
-       aes(x = ptype, y = rmse, fill = method)) +
-  geom_col(position = position_dodge()) +
-  labs(x = "Probability", y = "RMSE", fill = "Method") +
-  scale_x_discrete(labels = c(p_0 = expression(p[0]),
-                              p_w = expression(p[w]),
-                              p_d = expression(p[d]))) +
-  facet_wrap(~season, nrow = 1) +
-  base_theme()
+validation_probs_rmse_table %>%
+  mutate(across(where(is.numeric), ~ sprintf("%.3f", .x))) %>%
+  write.csv(here("results", "TableSyyy.csv"), row.names = FALSE)
 
 # RAINFALL OCCURRENCE -----------------------------------------------------
 
