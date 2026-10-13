@@ -62,6 +62,7 @@ saveRDS(zimbabwe_bc, here("data", "BC_data", "zimbabwe_agera5_bc.RDS"))
 
 m_thresh <- list()
 stations <- unique(zimbabwe$station)
+cal_sets <- c("B1", "B2", "B3", "B4")
 for (st in stations) {
   print(st)
   data_st <- zimbabwe %>% filter(station == st)
@@ -71,7 +72,7 @@ for (st in stations) {
     # Calculate thresholds on calibration data
     m_thresh_i <- markov_thresholds(data_cal, obs_col = "rain", est_col = "agera5_rain", 
                                     season_col = "season", station_col = "station")
-    m_thresh_i$block <- paste(blocks[b], "-", blocks[b + 1] - 1)
+    m_thresh_i$calibration_set <- paste0("{", paste0(cal_sets[-i], collapse = ", "), "}")
     m_thresh[[length(m_thresh) + 1]] <- m_thresh_i
   }
 }
@@ -81,7 +82,7 @@ m_thresh$station <- recode(m_thresh$station,
                            Mt_Darwin = "Mt Darwin")
 
 m_thresh_res <- m_thresh %>%
-  dplyr::select(block, station:iterations, 
+  dplyr::select(calibration_set, station:iterations, 
                 p0_obs:p_d_est,
                 s_all, s_wet, s_dry,
                 gamma_est_all, gamma_est_wet, gamma_est_dry) %>%
@@ -97,16 +98,13 @@ m_thresh_res <- m_thresh_res %>%
   mutate(t_diff = t_w - t_d) %>%
   relocate(t_diff, .after = t_d)
 
-mean(abs(m_thresh_res$t_diff))
-max(abs(m_thresh_res$t_diff))
-
 # Table in supplementary material 1
 m_thresh_res %>%
   mutate(across(where(is.numeric), ~ sprintf("%.3f", .x))) %>%
   write.csv(here("results", "TableS1.csv"), row.names = FALSE)
 
 m_thresh_p <- m_thresh %>%
-  dplyr::select(block, station:iterations, p0_obs:p_d_est) %>%
+  dplyr::select(calibration_set, station:iterations, p0_obs:p_d_est) %>%
   pivot_longer(
     cols = c(p0_obs:p_d_est),
     names_to = c("ptype", "source"),
