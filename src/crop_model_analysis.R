@@ -18,7 +18,7 @@ metrics_by_source <- yields %>%
 metrics_by_source %>%
   mutate(across(starts_with("M"), ~ sprintf("%.1f", .x)),
          cor = sprintf("%.3f", cor)) %>%
-  write.csv(here("results", "TableCM.csv"), row.names = FALSE)
+  write.csv(here("results", "Table13.csv"), row.names = FALSE)
 
 yields_plot <- yields %>%
   dplyr::select(station, crop_season, source, Yield) %>%
@@ -160,4 +160,4 @@ yield_boot_results %>%
     )
   ) %>%
   dplyr::select(station, comparison, metric, Difference, `95% CI`) %>%
-  write.csv(here("results", "TableCMCIs.csv"), row.names = FALSE)
+  write.csv(here("results", "TableS19.csv"), row.names = FALSE)

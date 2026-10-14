@@ -105,7 +105,7 @@ ggplot(validation_probs_long  %>% filter(ptype_mc == "Conditional"),
   facet_grid(rows = vars(method), cols = vars(station), axes = "all_x") +
   base_theme()
 
-ggsave(here("results", "Figyyy.png"), bg = "white",
+ggsave(here("results", "Fig3.png"), bg = "white",
        dpi = 600, width = 12, height = 6)
 
 validation_probs_metrics <- validation_probs_long %>%
@@ -125,7 +125,7 @@ validation_probs_rmse_table <- validation_probs_metrics %>%
 
 validation_probs_rmse_table %>%
   mutate(across(where(is.numeric), ~ sprintf("%.3f", .x))) %>%
-  write.csv(here("results", "TableSyyy.csv"), row.names = FALSE)
+  write.csv(here("results", "TableS4.csv"), row.names = FALSE)
 
 # RAINFALL OCCURRENCE -----------------------------------------------------
 
@@ -174,7 +174,7 @@ ggplot(zim_monthly_occ,
                                    "MC" = 0.5)) +
   base_theme(panel.grid.minor = TRUE)
 
-ggsave(here("results", "Fig3.png"), bg = "white",
+ggsave(here("results", "Fig4.png"), bg = "white",
        dpi = 600, width = 12, height = 6)
   
 # Annual summaries --------------------------------------------------------
@@ -240,7 +240,7 @@ ggplot(zim_annual_occ %>% filter(s_year != 2022),
        x = "Year",
        y = "Number of rain days")
 
-ggsave(here("results", "Fig4.png"), bg = "white",
+ggsave(here("results", "Fig5.png"), bg = "white",
        dpi = 600, width = 12, height = 6)
 
 tbl_annual_occ_nrain <- zim_annual_occ_metrics %>%
@@ -284,8 +284,7 @@ nrain_cis <- zim_annual_occ_nrain_wide %>%
 
 nrain_cis %>%
   mutate(across(where(is.numeric), ~ sprintf("%.2f", .x))) %>%
-  #TODO Update table name once finalised
-  write.csv(here("results", "Table6CIs.csv"), row.names = FALSE)
+  write.csv(here("results", "TableS5.csv"), row.names = FALSE)
 
 # Annual length of longest dry spell (October to March)
 ggplot(zim_annual_occ, 
@@ -298,7 +297,7 @@ ggplot(zim_annual_occ,
        x = "Year",
        y = "Maximum dry spell length (days)")
 
-ggsave(here("results", "Fig5.png"), bg = "white",
+ggsave(here("results", "Fig6.png"), bg = "white",
        dpi = 600, width = 12, height = 6)
 
 tbl_annual_occ_maxdry <- zim_annual_occ_metrics %>%
@@ -340,8 +339,7 @@ maxdryspell_cis <- zim_annual_occ_maxdryspell_wide %>%
 
 maxdryspell_cis %>%
   mutate(across(where(is.numeric), ~ sprintf("%.2f", .x))) %>%
-  #TODO Update table name once finalised
-  write.csv(here("results", "Table7CIs.csv"), row.names = FALSE)
+  write.csv(here("results", "TableS6.csv"), row.names = FALSE)
 
 # Distribution of wet/dry spells ------------------------------------------
 
@@ -377,7 +375,7 @@ ggplot(wet_spells, aes(x = wet_spell_length, colour = source)) +
   col_scale_occ +
   base_theme(panel.grid.minor = FALSE)
 
-ggsave(here("results", "Fig6.png"), bg = "white",
+ggsave(here("results", "Fig7.png"), bg = "white",
        dpi = 600, width = 12, height = 6)
 
 ks_results_wet <- wet_spells %>%
@@ -424,8 +422,7 @@ wet_ks_cis <- wet_spells %>%
 wet_ks_cis  %>%
   mutate(across(where(is.numeric), ~ sprintf("%.3f", .x))) %>%
   dplyr::select(-boot) %>%
-  #TODO Update table name once finalised
-  write.csv(here("results", "Table8CIs.csv"), row.names = FALSE)
+  write.csv(here("results", "TableS7a.csv"), row.names = FALSE)
 
 ggplot(dry_spells, aes(x = dry_spell_length, colour = source)) +
   stat_ecdf(linewidth = 1) +
@@ -439,7 +436,7 @@ ggplot(dry_spells, aes(x = dry_spell_length, colour = source)) +
   col_scale_occ +
   base_theme(panel.grid.minor = FALSE)
 
-ggsave(here("results", "Fig7.png"), bg = "white",
+ggsave(here("results", "Fig8.png"), bg = "white",
        dpi = 600, width = 12, height = 6)
 
 ks_results_dry <- dry_spells %>%
@@ -486,8 +483,7 @@ dry_ks_cis <- dry_spells %>%
 dry_ks_cis  %>%
   mutate(across(where(is.numeric), ~ sprintf("%.3f", .x))) %>%
   dplyr::select(-boot) %>%
-  #TODO Update table name once finalised
-  write.csv(here("results", "Table9CIs.csv"), row.names = FALSE)
+  write.csv(here("results", "TableS7b.csv"), row.names = FALSE)
 
 # By block
 
@@ -633,7 +629,7 @@ ggplot(fitted_doy_df_0, aes(x = s_doy_date, y = fitted, color = source)) +
   col_scale_occ +
   base_theme(panel.grid.minor = FALSE)
 
-ggsave(here("results", "Fig8.png"), bg = "white",
+ggsave(here("results", "Fig9.png"), bg = "white",
        dpi = 600, width = 12, height = 6)
 
 rain_ref <- fitted_doy_df_0 %>%
@@ -701,7 +697,7 @@ ggplot(fitted_doy_df_1, aes(x = s_doy_date, y = fitted, color = source)) +
   facet_grid(rows = vars(lag_rainday_fct), cols = vars(station),
              axes = "all_x")
 
-ggsave(here("results", "Fig9.png"), bg = "white",
+ggsave(here("results", "Fig10.png"), bg = "white",
        dpi = 600, width = 12, height = 6)
 
 rain_ref <- fitted_doy_df_1 %>%
@@ -722,7 +718,7 @@ rmse_rainday_1_wide <- rmse_rainday_1 %>%
 # Include in supplementary material
 rmse_rainday_1_wide %>%
   mutate(across(where(is.numeric), ~ sprintf("%.3f", .x))) %>%
-  write.csv(here("results", "TableS2.csv"), row.names = FALSE)
+  write.csv(here("results", "TableS8a.csv"), row.names = FALSE)
 
 ggplot(rmse_rainday_1,
        aes(x = lag_rainday_fct, y = RMSE, fill = source)) +
@@ -736,7 +732,7 @@ ggplot(rmse_rainday_1,
   col_fill_occ +
   base_theme()
 
-ggsave(here("results", "Fig10.png"), bg = "white",
+ggsave(here("results", "Fig11.png"), bg = "white",
        dpi = 600, width = 12, height = 6)
 
 # First order RMSE CIs (Table S3)
@@ -760,7 +756,7 @@ mc_first_occ_rmse_cis <- zimbabwe_bc_stack_occ %>%
 mc_first_occ_rmse_cis %>%
   mutate(across(where(is.numeric), ~ sprintf("%.3f", .x))) %>%
   dplyr::select(-boot) %>%
-  write.csv(here("results", "TableS3CIs.csv"), row.names = FALSE)
+  write.csv(here("results", "TableS8b.csv"), row.names = FALSE)
 
 # By block
 
@@ -894,7 +890,7 @@ ggplot(zimbabwe_pod_hss_occ,
   col_fill_occ +
   base_theme(panel.grid.minor = FALSE)
 
-ggsave(here("results", "Fig11.png"), bg = "white",
+ggsave(here("results", "Fig12.png"), bg = "white",
        dpi = 600, width = 12, height = 6)
 
 # Include table in supplementary material
@@ -904,7 +900,7 @@ zimbabwe_pod_hss_occ_wide <- zimbabwe_pod_hss_occ %>%
 
 zimbabwe_pod_hss_occ_wide %>%
   mutate(across(where(is.numeric), ~ sprintf("%.3f", .x))) %>%
-  write.csv(here("results", "TableS4.csv"), row.names = FALSE)
+  write.csv(here("results", "TableS9a.csv"), row.names = FALSE)
 
 # CIs for POD, FAR, HSS (Table S4)
 
@@ -930,7 +926,7 @@ occ_det_cis %>%
   dplyr::select(station, metric, diff, ci) %>%
   arrange(factor(metric, levels = c("pod", "far", "hss")), station) %>%
   mutate(across(where(is.numeric), ~ sprintf("%.3f", .x))) %>%
-  write.csv(here("results", "TableS4CIs.csv"), row.names = FALSE)
+  write.csv(here("results", "TableS9b.csv"), row.names = FALSE)
 
 # Station-block summaries -------------------------------------------------
 
@@ -999,7 +995,7 @@ ggplot(zim_monthly_amt,
   col_scale_amt +
   base_theme()
 
-ggsave(here("results", "Fig12.png"), dpi = 600, 
+ggsave(here("results", "Fig13.png"), dpi = 600, 
        bg = "white", width = 12, height = 6)
 
 ggplot(zim_monthly_amt, 
@@ -1013,7 +1009,7 @@ ggplot(zim_monthly_amt,
   col_scale_amt +
   base_theme()
 
-ggsave(here("results", "Fig13.png"), dpi = 600,
+ggsave(here("results", "Fig14.png"), dpi = 600,
        bg = "white", width = 12, height = 6)
 
 zim_monthly_amt_metrics <- zim_monthly_amt %>%
@@ -1029,7 +1025,7 @@ zim_monthly_amt_metrics <- zim_monthly_amt %>%
 
 zim_monthly_amt_metrics %>%
   mutate(across(where(is.numeric), ~ sprintf("%.2f", .x))) %>%
-  write.csv(here("results", "TableS5.csv"), row.names = FALSE)
+  write.csv(here("results", "TableS10.csv"), row.names = FALSE)
 
 ggplot(zim_monthly_amt, 
        aes(x = month_abb, y = max_rain, colour = source, group = source)) +
@@ -1042,7 +1038,7 @@ ggplot(zim_monthly_amt,
   col_scale_amt +
   base_theme()
 
-ggsave(here("results", "Fig14.png"), dpi = 600,
+ggsave(here("results", "Fig15.png"), dpi = 600,
        bg = "white", width = 12, height = 6)
 
 # Boostrap CIs for Month mean rainfall RMSE (Table S5)
@@ -1066,7 +1062,7 @@ monthly_mean_rmse_cis <- zim_monthly_annual_amt %>%
 
 monthly_mean_rmse_cis %>%
   mutate(across(where(is.numeric), ~ sprintf("%.2f", .x))) %>%
-  write.csv(here("results", "TableS5CIs.csv"), row.names = FALSE)
+  write.csv(here("results", "TableS11.csv"), row.names = FALSE)
 
 # Annual summaries --------------------------------------------------------
 
@@ -1110,7 +1106,7 @@ zim_annual_amt_metrics <- zim_annual_amt_wide %>%
 
 zim_annual_amt_metrics %>%
   mutate(across(where(is.numeric), ~ sprintf("%.2f", .x))) %>%
-  write.csv(here("results", "TableS6.csv"), row.names = FALSE)
+  write.csv(here("results", "TableS12.csv"), row.names = FALSE)
 
 # Boostrap CIs for annual summaries (Table S6)
 
@@ -1207,7 +1203,7 @@ annual_amt_cis_wide <- annual_amt_cis %>%
           station, comparison)
 
 annual_amt_cis_wide %>%
-  write.csv(here("results", "TableS6CIs.csv"), row.names = FALSE)
+  write.csv(here("results", "TableS13.csv"), row.names = FALSE)
 
 
 # Annual total rainfall
@@ -1237,7 +1233,7 @@ ggplot(zim_annual_amt,
   col_scale_amt + 
   base_theme()
 
-ggsave(here("results", "Fig15.png"), dpi = 600,
+ggsave(here("results", "Fig16.png"), dpi = 600,
        width = 12, height = 6)
 
 # Annual max rainfall
@@ -1308,7 +1304,7 @@ ggplot(fitted_doy_df_0_amounts,
   col_scale_amt + 
   base_theme()
 
-ggsave(here("results", "Fig16.png"), dpi = 600,
+ggsave(here("results", "Fig17.png"), dpi = 600,
        bg = "white", width = 12, height = 6)
 
 rain_ref <- fitted_doy_df_0_amounts %>%
@@ -1347,7 +1343,7 @@ mc_zero_amt_rmse_cis <- zimbabwe_bc_stack_amt %>%
 mc_zero_amt_rmse_cis %>%
   mutate(across(where(is.numeric), ~ sprintf("%.2f", .x))) %>%
   dplyr::select(-boot) %>%
-  write.csv(here("results", "Table12CIs.csv"), row.names = FALSE)
+  write.csv(here("results", "TableS14.csv"), row.names = FALSE)
 
 # By block
 
@@ -1445,7 +1441,7 @@ fitted_doy_df_1_amounts$lag_rainday_fct <-
 
 ggplot(fitted_doy_df_1_amounts, 
        aes(x = s_doy_date, y = fitted, color = source)) +
-  geom_line(size = 0.8) +
+  geom_line(linewidth = 0.8) +
   scale_x_date(date_breaks = "2 months", date_labels = "%b") +
   facet_grid(vars(lag_rainday_fct), vars(station), axes = "all_x") +
   labs(
@@ -1456,8 +1452,8 @@ ggplot(fitted_doy_df_1_amounts,
   base_theme() +
   col_scale_amt
 
-ggsave(here("results", "Fig17.jpeg"),
-       width = 12, height = 6)
+ggsave(here("results", "Fig18.png"), dpi = 600,
+       bg = "white", width = 12, height = 6)
 
 rain_ref <- fitted_doy_df_1_amounts %>%
   filter(source == "Gauge") %>%
@@ -1473,7 +1469,7 @@ rmse_rain_amounts_1 <- fitted_doy_df_1_amounts %>%
 rmse_rain_amounts_1 %>%
   pivot_wider(names_from = lag_rainday_fct, values_from = RMSE) %>%
   mutate(across(where(is.numeric), ~ sprintf("%.2f", .x))) %>%
-  write.csv(here("results", "TableS4.csv"), row.names = FALSE)
+  write.csv(here("results", "TableS15.csv"), row.names = FALSE)
 
 ggplot(rmse_rain_amounts_1,
        aes(x = lag_rainday_fct, y = RMSE, fill = source)) +
@@ -1487,8 +1483,8 @@ ggplot(rmse_rain_amounts_1,
   base_theme() +
   col_fill_amt
 
-ggsave(here("results", "Fig18.jpeg"),
-       width = 12, height = 6)
+ggsave(here("results", "Fig19.png"), dpi = 600,
+       bg = "white", width = 12, height = 6)
 
 # Boostrap CIs for 1st order MC amounts RMSE (Table S4)
 
@@ -1523,7 +1519,7 @@ mc_first_amt_rmse_cis_wide <- mc_first_amt_rmse_cis %>%
 
 mc_first_amt_rmse_cis_wide %>%
   mutate(across(where(is.numeric), ~ sprintf("%.2f", .x))) %>%
-  write.csv(here("results", "TableS7CIs.csv"), row.names = FALSE)
+  write.csv(here("results", "TableS16.csv"), row.names = FALSE)
 
 # By block
 
@@ -1645,7 +1641,7 @@ zimbabwe_pod_hss_amt %>%
     HSS = hss
   ) %>%
   mutate(across(where(is.numeric), ~ sprintf("%.3f", .x))) %>%
-  write.csv(here("results", "TableS8.csv"), row.names = FALSE)
+  write.csv(here("results", "TableS17.csv"), row.names = FALSE)
 
   zimbabwe_pod_hss_amt_format <- zimbabwe_pod_hss_amt %>%
   dplyr::select(-ver) %>%
@@ -1679,7 +1675,7 @@ ggplot(zimbabwe_pod_hss_amt_long, aes(x = metric, y = value, fill = source)) +
     axis.text.x = element_text(angle = 25, hjust = 1),
   )
 
-ggsave(here("results", "Fig19.png"), dpi = 600,
+ggsave(here("results", "Fig20.png"), dpi = 600,
        bg = "white", width = 12, height = 6)
 
 # CIs for POD and HSS amounts
@@ -1725,4 +1721,4 @@ amt_detection_cis_table <- amt_detection_cis %>%
 
 amt_detection_cis_table %>%
   mutate(across(where(is.numeric), ~ sprintf("%.3f", .x))) %>%
-  write.csv(here("results", "TableS8CIs.csv"), row.names = FALSE)
+  write.csv(here("results", "TableS18.csv"), row.names = FALSE)
