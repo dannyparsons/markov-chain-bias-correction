@@ -1,3 +1,13 @@
+library(here)
+library(readr)
+library(dplyr)
+library(ggplot2)
+library(boot)
+library(tidyr)
+library(purrr)
+
+source(here("src", "helper_funs.R"))
+
 yields <- read_rds(here("data", "yields_mtdarwin.rds"))
 
 metrics_by_source <- yields %>%
@@ -20,40 +30,6 @@ metrics_by_source %>%
          cor = sprintf("%.3f", cor)) %>%
   write.csv(here("results", "Table13.csv"), row.names = FALSE)
 
-yields_plot <- yields %>%
-  dplyr::select(station, crop_season, source, Yield) %>%
-  group_by(station, source) %>%
-  complete(crop_season = full_seq(crop_season, 1)) %>%
-  ungroup() %>%
-  mutate(source = recode(source,
-                         "rain" = "Gauge",
-                         "agera5_rain" = "AgERA5",
-                         "est_loci" = "LOCI",
-                         "est_loci_mk" = "MC LOCI",
-                         "est_qm_gamma" = "QM",
-                         "est_qm_gamma_mk" = "MC QM"),
-         source = factor(source, levels = c("Gauge", "AgERA5", "LOCI", "MC LOCI", "QM", "MC QM")))
-
-col_values_amt <- c(
-  AgERA5 = "#E31A1C",
-  LOCI = "dodgerblue2",
-  `MC LOCI` = "green4",
-  QM = "#FF7F00",
-  `MC QM` = "gold1"
-)
-
-col_scale_amt <- scale_colour_manual(
-  values =  col_values_amt
-)
-
-ggplot(yields_plot,
-       aes(x = crop_season, y = Yield, colour = source, group = source)) +
-  geom_line(na.rm = FALSE) +
-  geom_point() +
-  labs(x = "Crop season", y = "Simulated yield", colour = "Rainfall source") +
-  col_scale_amt +
-  base_theme()
-
 yields_wide <- yields %>%
   dplyr::select(station, crop_season, source, Yield) %>%
   pivot_wider(names_from = source, values_from = Yield) %>%
@@ -71,10 +47,22 @@ yields_plot <- yields_wide %>%
                          "est_qm_gamma_mk" = "MC QM"),
          source = factor(source, levels = c("AgERA5", "LOCI", "MC LOCI", "QM", "MC QM")))
 
+col_values_amt <- c(
+  AgERA5 = "#E31A1C",
+  LOCI = "dodgerblue2",
+  `MC LOCI` = "green4",
+  QM = "#FF7F00",
+  `MC QM` = "gold1"
+)
+
+col_scale_amt <- scale_colour_manual(
+  values =  col_values_amt
+)
+
 ggplot(yields_plot, aes(x = rain, y = yield)) +
   geom_abline(slope = 1, intercept = 0) +
   geom_point(aes(colour = source)) +
-  coord_fixed(xlim = c(2700, 6500), ylim = c(2700, 6500)) +
+  coord_fixed(xlim = c(0, 6500), ylim = c(0, 6500)) +
   facet_wrap(vars(source)) +
   labs(x = "Gauge-based yield (kg/ha)", y = "Esimate-based yield (kg/ha)") +
   col_scale_amt +
